@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.DS_Store
+
+# .venv/ →  local virtual environment; don't upload it
+# __pycache__/ → Python-generated cache
+# *.py[cod] → compiled Python files
+# .env → will eventually contain API keys/secrets; never committed
+# .DS_Store → macOS-generated file
