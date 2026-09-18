@@ -1,2 +1,2 @@
-def main() -> None:
-    print("Hello from ai-voice-receptionist!")
+def main():
+    print("AI Voice Receptionist project is running!")
