@@ -7,7 +7,9 @@ authors = [
     { name = "SumaiyaaRq", email = "sumaiya.rafique3838@gmail.com" }
 ]
 requires-python = ">=3.12,<3.13"
-dependencies = []
+dependencies = [
+    "fastapi[standard]>=0.141.1",
+]
 
 [project.scripts]
 ai-voice-receptionist = "ai_voice_receptionist:main"
