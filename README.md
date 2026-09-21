@@ -1,6 +1,6 @@
 # AI-Powered Voice Receptionist for Small Businesses
 
-## 📌 Project Overview
+## Project Overview
 
 The **AI-Powered Voice Receptionist** is a voice-based AI system designed to help small businesses handle customer calls and routine receptionist tasks.
 
@@ -8,7 +8,7 @@ The system will allow customers to communicate with an AI receptionist using nat
 
 The project aims to provide small businesses with an affordable automated receptionist that can operate with minimal human intervention.
 
-## 🎯 Problem Statement
+## Problem Statement
 
 Small businesses often cannot afford a dedicated receptionist or may lose potential customers when calls are unanswered. Traditional automated systems may also be limited to predefined menus and responses.
 
