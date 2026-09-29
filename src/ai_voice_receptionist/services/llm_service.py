@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from ai_voice_receptionist.services.appointment_service import check_availability
+from ai_voice_receptionist.services.appointment_service import (check_availability , book_appointment)
 
 load_dotenv()
 
@@ -41,8 +41,29 @@ check_availability_tool = {
         "required": ["date", "time"]
     }
 }
-
-tools = types.Tool(function_declarations=[check_availability_tool])
+book_appointment_tool = {
+    "name": "book_appointment",
+    "description": "Book an available appointment for a customer.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "date": {
+                "type": "string",
+                "description": "Appointment date in YYYY-MM-DD format."
+            },
+            "time": {
+                "type": "string",
+                "description": "Appointment time in HH:MM format."
+            },
+            "customer_name": {
+                "type": "string",
+                "description": "Name of the customer booking the appointment."
+            }
+        },
+        "required": ["date", "time", "customer_name"]
+    }
+}
+tools = types.Tool(function_declarations=[check_availability_tool , book_appointment_tool])
 def generate_response(message: str) -> str:
     response = client.models.generate_content(
         model="gemini-2.5-flash",
@@ -63,14 +84,29 @@ def generate_response(message: str) -> str:
 
             result = check_availability(date, time)
 
-            function_response_part = types.Part.from_function_response(
+
+        elif function_call.name == "book_appointment":
+            date = function_call.args["date"]
+            time = function_call.args["time"]
+            customer_name = function_call.args["customer_name"]
+
+            result = book_appointment(
+                date,
+                time,
+                customer_name
+            )
+
+        else:
+            return "I couldn't process that request."
+        
+        function_response_part = types.Part.from_function_response(
                 name=function_call.name,
                 response={
-                    "available": result
+                    "result": result
                 },
             )
 
-            final_response = client.models.generate_content(
+        final_response = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=[
                     types.Content(
@@ -90,7 +126,7 @@ def generate_response(message: str) -> str:
                 },
             )
 
-            return final_response.text
+        return final_response.text
 
     return response.text
     
