@@ -64,16 +64,17 @@ book_appointment_tool = {
     }
 }
 tools = types.Tool(function_declarations=[check_availability_tool , book_appointment_tool])
+
+chat = client.chats.create(
+    model="gemini-2.5-flash",
+    config={
+        "system_instruction": SYSTEM_INSTRUCTION,
+        "tools": [tools],
+    },
+)
+
 def generate_response(message: str) -> str:
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=message,
-        config={
-            "system_instruction": SYSTEM_INSTRUCTION,
-            "tools": [tools],
-            
-        },
-    )
+    response = chat.send_message(message)
     function_call = response.candidates[0].content.parts[0].function_call
 
     if function_call:
