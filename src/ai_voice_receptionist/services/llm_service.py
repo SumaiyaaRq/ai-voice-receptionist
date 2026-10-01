@@ -1,17 +1,20 @@
 import os
+from datetime import date
 
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from ai_voice_receptionist.services.appointment_service import (check_availability , book_appointment)
+from ai_voice_receptionist.services.appointment_service import (check_availability , book_appointment ,  validate_appointment_date)
 
 load_dotenv()
+today = date.today().isoformat()
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 
-SYSTEM_INSTRUCTION = """
+SYSTEM_INSTRUCTION = f"""
+Today's date is {today}.
 You are an AI receptionist for a small business.
 
 Your responsibilities:
@@ -21,11 +24,15 @@ Your responsibilities:
 - Ask for missing information when necessary.
 - Never claim that an appointment has been booked unless the booking system confirms it.
 - Never invent business information or appointment availability.
+- Always check appointment availability before asking for the customer's name.
+- If the requested appointment date/time is in the past, tell the customer that it has already passed and do not ask for their name.
+- If a requested slot is unavailable, explain that it is unavailable and do not proceed with booking.
+- Only ask for the customer's name after an available appointment slot has been confirmed.
 """
 
 check_availability_tool = {
     "name": "check_availability",
-    "description": "Check whether a specific appointment date and time is available.",
+    "description": """Check whether a specific appointment date and time is available.The result can be:- available: the slot can be booked.- past_date: the requested date and time has already passed.- not_found: the requested date or time is not in the appointment schedule.- already_booked: the slot exists but is already booked.""",
     "parameters": {
         "type": "object",
         "properties": {
@@ -63,7 +70,31 @@ book_appointment_tool = {
         "required": ["date", "time", "customer_name"]
     }
 }
-tools = types.Tool(function_declarations=[check_availability_tool , book_appointment_tool])
+
+validate_appointment_date_tool = {
+    "name": "validate_appointment_date",
+    "description": """
+    Validate an appointment date before asking for or checking an appointment time.
+
+    Use this when the customer provides a date but has not provided a time yet.
+
+    The result can be:
+    - past_date: the requested date has already passed.
+    - today: the requested date is today.
+    - future_date: the requested date is in the future.
+    """,
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "date": {
+                "type": "string",
+                "description": "Appointment date in YYYY-MM-DD format."
+            }
+        },
+        "required": ["date"]
+    }
+}
+tools = types.Tool(function_declarations=[check_availability_tool , book_appointment_tool , validate_appointment_date_tool])
 
 chat = client.chats.create(
     model="gemini-2.5-flash",
@@ -79,7 +110,13 @@ def generate_response(message: str) -> str:
 
     if function_call:
 
-        if function_call.name == "check_availability":
+
+        if function_call.name == "validate_appointment_date":
+            date = function_call.args["date"]
+
+            result = validate_appointment_date(date)
+
+        elif function_call.name == "check_availability":
             date = function_call.args["date"]
             time = function_call.args["time"]
 
