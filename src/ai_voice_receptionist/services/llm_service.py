@@ -96,15 +96,18 @@ validate_appointment_date_tool = {
 }
 tools = types.Tool(function_declarations=[check_availability_tool , book_appointment_tool , validate_appointment_date_tool])
 
-chat = client.chats.create(
-    model="gemini-2.5-flash",
-    config={
-        "system_instruction": SYSTEM_INSTRUCTION,
-        "tools": [tools],
-    },
-)
+chats = {}
+def generate_response(message: str , session_id:str) -> str:
+    if session_id not in chats:
+        chat[session_id] = client.chats.create(
+            model="gemini-2.5-flash",
+            config={
+                "system_instruction": SYSTEM_INSTRUCTION,
+                "tools": [tools],
+            },
+        )
 
-def generate_response(message: str) -> str:
+    chat = chats[session_id]
     response = chat.send_message(message)
     function_call = response.candidates[0].content.parts[0].function_call
 
@@ -144,24 +147,8 @@ def generate_response(message: str) -> str:
                 },
             )
 
-        final_response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=[
-                    types.Content(
-                        role="user",
-                        parts=[
-                            types.Part.from_text(text=message)
-                        ],
-                    ),
-                    response.candidates[0].content,
-                    types.Content(
-                        role="tool",
-                        parts=[function_response_part],
-                    ),
-                ],
-                config={
-                    "system_instruction": SYSTEM_INSTRUCTION,
-                },
+        final_response = chat.send_message(
+                function_response_part,
             )
 
         return final_response.text

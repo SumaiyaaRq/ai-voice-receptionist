@@ -12,12 +12,18 @@ def health_check():
 
 
 class MessageRequest(BaseModel):
+    session_id:str
     message: str
 
 
 @app.post("/message")
 def receive_message(request: MessageRequest):
-    response = generate_response(request.message)
+    response = generate_response(
+    request.message,
+    request.session_id
+    )
+
     return {
+        "session_id": request.session_id,
         "response": response
     }
