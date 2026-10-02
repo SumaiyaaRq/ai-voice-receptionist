@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from ai_voice_receptionist.services.llm_service import (generate_response , reset_session )
-from ai_voice_receptionist.services.appointment_service import (get_appointments , cancel_appointment ,)
+from ai_voice_receptionist.services.appointment_service import (get_appointments , cancel_appointment)
 
 app = FastAPI()
 
@@ -41,9 +41,9 @@ def delete_session(session_id: str):
     }
 
 @app.get("/appointments")
-def list_appointments():
+def list_appointments(appointment_date: str = None , status:str =None):
     return {
-        "appointments": get_appointments()
+        "appointments": get_appointments(appointment_date, status)
     }
 @app.delete("/appointments/{appointment_id}")
 def delete_appointment(appointment_id: int):

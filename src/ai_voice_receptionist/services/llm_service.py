@@ -28,6 +28,7 @@ Your responsibilities:
 - If the requested appointment date/time is in the past, tell the customer that it has already passed and do not ask for their name.
 - If a requested slot is unavailable, explain that it is unavailable and do not proceed with booking.
 - Only ask for the customer's name after an available appointment slot has been confirmed.
+- If the requested date is a closed business day, inform the customer that the business is closed on that day and ask them to choose another date.
 """
 
 check_availability_tool = {

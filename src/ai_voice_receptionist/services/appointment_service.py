@@ -1,23 +1,56 @@
 import sqlite3
 from pathlib import Path
-from datetime import date, datetime, time
+from datetime import  datetime, timedelta
 # Store the database in the project root.
 DB_PATH = Path(__file__).resolve().parents[3] / "appointments.db"
 
 # Temporary business schedule.
 # True = slot offered; False = unavailable from the initial schedule
-MOCK_APPOINTMENTS = {
-    "2026-09-29": {
-        "10:00": True,
-        "11:00": False,
-        "15:00": True,
-        "16:00": False,
-    },
-    "2026-10-02": {
-        "15:00": True,
-        "16:00": False,
-    }
-}
+# MOCK_APPOINTMENTS = {
+#     "2026-09-29": {
+#         "10:00": True,
+#         "11:00": False,
+#         "15:00": True,
+#         "16:00": False,
+#     },
+#     "2026-10-02": {
+#         "15:00": True,
+#         "16:00": False,
+#     }
+# }
+
+BUSINESS_OPENING_TIME = "09:00"
+BUSINESS_CLOSING_TIME = "17:00"
+
+BUSINESS_DAYS = [0, 1, 2, 3, 4]
+
+APPOINTMENT_DURATION_MINUTES = 60
+
+def generate_time_slots():
+    """Generate appointment slots based on business hours."""
+
+    opening = datetime.strptime(
+        BUSINESS_OPENING_TIME, "%H:%M"
+    )
+
+    closing = datetime.strptime(
+        BUSINESS_CLOSING_TIME, "%H:%M"
+    )
+
+    slots = []
+    current = opening
+
+    while (
+        current + timedelta(minutes=APPOINTMENT_DURATION_MINUTES)
+        <= closing
+    ):
+        slots.append(current.strftime("%H:%M"))
+
+        current += timedelta(
+            minutes=APPOINTMENT_DURATION_MINUTES
+        )
+
+    return slots
 
 def get_connection():
     return sqlite3.connect(DB_PATH)
@@ -123,24 +156,27 @@ def validate_datetime(date: str, time: str) -> str:
     return "valid"
 
 def check_availability(date: str, time: str) -> bool:
-    """Check whether a specific appointment slot is available."""
+    """Check availability using business hours and SQLite."""
 
     date_status = validate_date(date)
 
     if date_status == "past_date":
         return "past_date"
+
+    appointment_date = datetime.strptime(
+    date, "%Y-%m-%d"
+    ).date()
+
+    if appointment_date.weekday() not in BUSINESS_DAYS:
+        return "closed_day"
     
     datetime_status = validate_datetime(date, time)
     if datetime_status == "past_datetime":
         return "past_datetime"
 
-    if date not in MOCK_APPOINTMENTS:
-        return "not_found"
 
-    if time not in MOCK_APPOINTMENTS[date]:
+    if time not in generate_time_slots():
         return "not_found"
-
-   
         
     with get_connection() as connection:
         booking = connection.execute(
@@ -158,8 +194,13 @@ def check_availability(date: str, time: str) -> bool:
 
     return "available"
 
-def book_appointment(date:str, time:str , customer_name:str)-> bool:
-    """ Save an appointment in SQLite if the slot is available. """
+def book_appointment(
+    date: str,
+    time: str,
+    customer_name: str
+) -> bool:
+    """Save an appointment safely in SQLite."""
+
     status = check_availability(date, time)
 
     if status != "available":
@@ -179,28 +220,25 @@ def book_appointment(date:str, time:str , customer_name:str)-> bool:
                 (customer_name, date, time)
             )
 
-    # MOCK_APPOINTMENTS[date][time] = False
-
         print(
-        f"Appointment booked for {customer_name} "
-        f"on {date} at {time}"
+            f"Appointment booked for {customer_name} "
+            f"on {date} at {time}"
         )
 
         return True
 
     except sqlite3.IntegrityError:
-    # Prevent two bookings for the same slot.
         return False
 
 
-def get_appointments():
-    """Retrieve all appointment records from SQLite."""
-
+def get_appointments(
+    appointment_date: str = None,
+    status: str = None
+):
     with get_connection() as connection:
         connection.row_factory = sqlite3.Row
 
-        records = connection.execute(
-            """
+        query = """
             SELECT
                 id,
                 customer_name,
@@ -209,15 +247,29 @@ def get_appointments():
                 status,
                 created_at
             FROM appointments
-            ORDER BY appointment_date, appointment_time
-            """
+            WHERE 1=1
+        """
+
+        parameters = []
+
+        if appointment_date:
+            query += " AND appointment_date = ?"
+            parameters.append(appointment_date)
+
+        if status:
+            query += " AND status = ?"
+            parameters.append(status)
+
+        query += " ORDER BY appointment_date, appointment_time"
+
+        records = connection.execute(
+            query,
+            parameters
         ).fetchall()
 
     return [dict(record) for record in records]
-
+            
 def cancel_appointment(appointment_id: int) -> bool:
-    """Cancel an existing appointment without deleting its record."""
-
     with get_connection() as connection:
         cursor = connection.execute(
             """
@@ -228,5 +280,4 @@ def cancel_appointment(appointment_id: int) -> bool:
             """,
             (appointment_id,)
         )
-
         return cursor.rowcount > 0
