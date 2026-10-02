@@ -1,5 +1,11 @@
+import sqlite3
+from pathlib import Path
 from datetime import date, datetime, time
+# Store the database in the project root.
+DB_PATH = Path(__file__).resolve().parents[3] / "appointments.db"
 
+# Temporary business schedule.
+# True = slot offered; False = unavailable from the initial schedule
 MOCK_APPOINTMENTS = {
     "2026-09-29": {
         "10:00": True,
@@ -12,6 +18,26 @@ MOCK_APPOINTMENTS = {
         "16:00": False,
     }
 }
+
+def get_connection():
+    return sqlite3.connect(DB_PATH)
+
+def initialize_database():
+    with get_connection() as connection:
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS appointments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                customer_name TEXT NOT NULL,
+                appointment_date TEXT NOT NULL,
+                appointment_time TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'booked',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(appointment_date, appointment_time)
+            )
+        """)
+      
+        connection.commit()
+initialize_database()
 
 def validate_date(date: str) -> str:
     """Validate whether an appointment date is in the past, today, or future."""
@@ -66,20 +92,91 @@ def check_availability(date: str, time: str) -> bool:
     if not MOCK_APPOINTMENTS[date][time]:
         return "already_booked"
 
+    with get_connection() as connection:
+        booking = connection.execute(
+            """
+            SELECT id FROM appointments
+            WHERE appointment_date = ?
+            AND appointment_time = ?
+            AND status = 'booked'
+            """,
+            (date, time)
+        ).fetchone()
+
+    if booking:
+        return "already_booked"
+
     return "available"
 
 def book_appointment(date:str, time:str , customer_name:str)-> bool:
-    """ Book an available appointment slot for a customer. """
+    """ Save an appointment in SQLite if the slot is available. """
     status = check_availability(date, time)
 
     if status != "available":
         return False
 
-    MOCK_APPOINTMENTS[date][time] = False
+    try:
+        with get_connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO appointments (
+                    customer_name,
+                    appointment_date,
+                    appointment_time
+                )
+                VALUES (?, ?, ?)
+                """,
+                (customer_name, date, time)
+            )
 
-    print(
+    # MOCK_APPOINTMENTS[date][time] = False
+
+        print(
         f"Appointment booked for {customer_name} "
         f"on {date} at {time}"
-    )
+        )
 
-    return True
+        return True
+
+    except sqlite3.IntegrityError:
+    # Prevent two bookings for the same slot.
+        return False
+
+
+def get_appointments():
+    """Retrieve all appointment records from SQLite."""
+
+    with get_connection() as connection:
+        connection.row_factory = sqlite3.Row
+
+        records = connection.execute(
+            """
+            SELECT
+                id,
+                customer_name,
+                appointment_date,
+                appointment_time,
+                status,
+                created_at
+            FROM appointments
+            ORDER BY appointment_date, appointment_time
+            """
+        ).fetchall()
+
+    return [dict(record) for record in records]
+
+def cancel_appointment(appointment_id: int) -> bool:
+    """Cancel an existing appointment without deleting its record."""
+
+    with get_connection() as connection:
+        cursor = connection.execute(
+            """
+            UPDATE appointments
+            SET status = 'cancelled'
+            WHERE id = ?
+            AND status = 'booked'
+            """,
+            (appointment_id,)
+        )
+
+        return cursor.rowcount > 0

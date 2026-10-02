@@ -97,9 +97,17 @@ validate_appointment_date_tool = {
 tools = types.Tool(function_declarations=[check_availability_tool , book_appointment_tool , validate_appointment_date_tool])
 
 chats = {}
+
+def reset_session(session_id: str) -> bool:
+    if session_id in chats:
+        del chats[session_id]
+        return True
+
+    return False
+
 def generate_response(message: str , session_id:str) -> str:
     if session_id not in chats:
-        chat[session_id] = client.chats.create(
+        chats[session_id] = client.chats.create(
             model="gemini-2.5-flash",
             config={
                 "system_instruction": SYSTEM_INSTRUCTION,
