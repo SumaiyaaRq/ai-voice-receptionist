@@ -24,6 +24,7 @@ def get_connection():
 
 def initialize_database():
     with get_connection() as connection:
+
         connection.execute("""
             CREATE TABLE IF NOT EXISTS appointments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,12 +32,62 @@ def initialize_database():
                 appointment_date TEXT NOT NULL,
                 appointment_time TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'booked',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(appointment_date, appointment_time)
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
-      
-        connection.commit()
+
+        indexes = connection.execute(
+            "PRAGMA index_list(appointments)"
+        ).fetchall()
+
+        has_old_constraint = any(
+            index[2] and index[3] == "u"
+            for index in indexes
+        )
+
+        if has_old_constraint:
+            connection.execute(
+                "ALTER TABLE appointments RENAME TO appointments_old"
+            )
+
+            connection.execute("""
+                CREATE TABLE appointments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    customer_name TEXT NOT NULL,
+                    appointment_date TEXT NOT NULL,
+                    appointment_time TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'booked',
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            connection.execute("""
+                INSERT INTO appointments (
+                    id,
+                    customer_name,
+                    appointment_date,
+                    appointment_time,
+                    status,
+                    created_at
+                )
+                SELECT
+                    id,
+                    customer_name,
+                    appointment_date,
+                    appointment_time,
+                    status,
+                    created_at
+                FROM appointments_old
+            """)
+
+            connection.execute("DROP TABLE appointments_old")
+
+        connection.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_unique_active_appointment_slot
+            ON appointments (appointment_date, appointment_time)
+            WHERE status = 'booked'
+        """)
 initialize_database()
 
 def validate_date(date: str) -> str:
@@ -89,19 +140,18 @@ def check_availability(date: str, time: str) -> bool:
     if time not in MOCK_APPOINTMENTS[date]:
         return "not_found"
 
-    if not MOCK_APPOINTMENTS[date][time]:
-        return "already_booked"
-
+   
+        
     with get_connection() as connection:
         booking = connection.execute(
-            """
-            SELECT id FROM appointments
-            WHERE appointment_date = ?
-            AND appointment_time = ?
-            AND status = 'booked'
-            """,
-            (date, time)
-        ).fetchone()
+                """
+                SELECT id FROM appointments
+                WHERE appointment_date = ?
+                AND appointment_time = ?
+                AND status = 'booked'
+                """,
+                (date, time)
+            ).fetchone()
 
     if booking:
         return "already_booked"
