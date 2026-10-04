@@ -4,7 +4,17 @@ from pydantic import BaseModel
 from ai_voice_receptionist.services.llm_service import (generate_response , reset_session )
 from ai_voice_receptionist.services.appointment_service import (get_appointments , cancel_appointment)
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/health")
 def health_check():

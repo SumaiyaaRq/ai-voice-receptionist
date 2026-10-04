@@ -2,14 +2,48 @@
 
 ## Project Overview
 
-The **AI-Powered Voice Receptionist** is a voice-based AI system designed to help small businesses handle customer calls and routine receptionist tasks.
+An AI-powered virtual receptionist designed to handle appointment-related queries, check availability, and assist users through natural language interactions.
 
-The system will allow customers to communicate with an AI receptionist using natural voice. The AI will understand customer requests, answer basic business-related questions, and perform tasks such as checking appointment availability and booking, cancelling, or rescheduling appointments.
+The project uses FastAPI for backend development and Google Gemini for natural language understanding and response generation. It is being developed with the goal of integrating appointment management and voice-based interaction into a single system.
 
-The project aims to provide small businesses with an affordable automated receptionist that can operate with minimal human intervention.
+## Project Status
 
-## Problem Statement
+Currently in development
 
-Small businesses often cannot afford a dedicated receptionist or may lose potential customers when calls are unanswered. Traditional automated systems may also be limited to predefined menus and responses.
+The backend foundation and core appointment-management logic are being developed incrementally.
 
-This project aims to develop an AI-powered voice receptionist that can understand natural conversations and perform real-world tasks such as appointment management by integrating with external services such as Google Calendar.
+## Tech Stack
+
+Language: Python 3.12
+
+Backend Framework: FastAPI
+
+LLM: Google Gemini
+
+AI Integration: Google Gen AI SDK
+
+Database: SQLite
+
+Package Management: uv
+
+Environment Management: python-dotenv
+
+## Current Features
+
+FastAPI backend with API endpoints.
+
+Gemini integration for natural language processing.
+
+AI receptionist instructions for handling user queries.
+
+Appointment availability checking.
+
+Appointment date and time validation.
+
+Prevention of booking appointments for past dates.
+
+SQLite-based data storage.
+
+Environment variable management for API credentials.
+
+API documentation through Swagger UI.
