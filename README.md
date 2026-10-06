@@ -47,3 +47,22 @@ SQLite-based data storage.
 Environment variable management for API credentials.
 
 API documentation through Swagger UI.
+
+## Project Structure
+
+```text
+ai-voice-receptionist/
+│
+├── src/
+│   └── ai_voice_receptionist/
+│       ├── main.py
+│       └── services/
+│           ├── appointment_service.py
+│           └── llm_service.py
+│
+├── .env
+├── .gitignore
+├── .python-version
+├── pyproject.toml
+├── uv.lock
+└── README.md
