@@ -212,7 +212,8 @@ button {
 }
 
 .conversation-panel {
-  min-height: 650px;
+  height:650px;
+  min-height: 0;
   background: #fff;
   border: 1px solid #eeedf3;
   border-radius: 18px;
@@ -257,7 +258,8 @@ button {
 .chat-area {
   flex: 1;
   padding: 30px;
-  min-height: 250px;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .message {

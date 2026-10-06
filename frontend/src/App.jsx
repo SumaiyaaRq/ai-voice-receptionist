@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState , useEffect, useRef } from "react";
 import { sendMessage } from "./services/api";
 import "./App.css";
 
@@ -12,7 +12,7 @@ function App() {
         "Hello! Welcome to our reception desk. I can help you book, check, or cancel an appointment. What would you like to do today?",
     },
   ]);
-
+  const chatAreaRef = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const [sessionId] = useState(() => {
@@ -25,6 +25,14 @@ function App() {
       })()
     );
   });
+
+useEffect(() => {
+  const chatArea = chatAreaRef.current;
+
+  if (chatArea) {
+    chatArea.scrollTop = chatArea.scrollHeight;
+  }
+}, [messages, isLoading]);
 
   async function handleSendMessage(text = message) {
     const userMessage = text.trim();
@@ -114,7 +122,7 @@ function App() {
               <div className="assistant-avatar">✦</div>
             </div>
 
-            <div className="chat-area">
+            <div className="chat-area" ref={chatAreaRef}>
               {messages.map((item, index) => (
                 <div
                   className={`message ${
