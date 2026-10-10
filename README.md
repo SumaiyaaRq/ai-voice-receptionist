@@ -66,3 +66,39 @@ ai-voice-receptionist/
 ├── pyproject.toml
 ├── uv.lock
 └── README.md
+```
+
+*Note: The structure above highlights the main backend files. The frontend directory and other files may vary depending on the current repository structure.*
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.12
+- uv package manager
+- Google Gemini API key
+
+### 1. Clone the Repository
+
+```bash
+git clone <your-repository-url>
+cd ai-voice-receptionist
+```
+
+### 2. Install Dependencies
+
+```bash
+uv sync
+```
+
+### 3. Configure Environment Variables
+
+Create a `.env` file in the project root:
+
+```env
+GEMINI_API_KEY=your_api_key_here
+```
+
+Replace the placeholder with your Gemini API key. Never commit your `.env` file or expose API credentials.
+
+### 4. Start the Backend
