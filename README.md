@@ -102,3 +102,16 @@ GEMINI_API_KEY=your_api_key_here
 Replace the placeholder with your Gemini API key. Never commit your `.env` file or expose API credentials.
 
 ### 4. Start the Backend
+
+```bash
+uv run fastapi dev src/ai_voice_receptionist/main.py
+```
+
+### 5. Access the API
+
+Once the server is running, open:
+
+- **Swagger UI:** http://127.0.0.1:8000/docs
+- **OpenAPI Schema:** http://127.0.0.1:8000/openapi.json
+
+Run the frontend using its own development command and configuration.
