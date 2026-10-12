@@ -1,6 +1,6 @@
 
 import { useState , useEffect, useRef } from "react";
-import { sendMessage } from "./services/api";
+import { sendMessage ,getAppointments, cancelAppointment} from "./services/api";
 import "./App.css";
 
 function App() {
@@ -33,6 +33,45 @@ useEffect(() => {
     chatArea.scrollTop = chatArea.scrollHeight;
   }
 }, [messages, isLoading]);
+
+const [activeView, setActiveView] = useState("reception");
+const [appointments, setAppointments] = useState([]);
+const [appointmentsLoading, setAppointmentsLoading] = useState(false);
+const [appointmentsError, setAppointmentsError] = useState("");
+const [appointmentStatus, setAppointmentStatus] = useState("");
+const [appointmentDate, setAppointmentDate] = useState("");
+
+
+async function loadAppointments() {
+  setAppointmentsLoading(true);
+  setAppointmentsError("");
+
+  try {
+    const filters = {};
+
+    if (appointmentStatus) {
+      filters.status = appointmentStatus;
+    }
+
+    if (appointmentDate) {
+      filters.appointment_date = appointmentDate;
+    }
+
+    const data = await getAppointments(filters);
+    setAppointments(data.appointments ?? []);
+  } catch (error) {
+    console.error("Appointment loading error:", error);
+    setAppointmentsError("Unable to load appointments. Please try again.");
+  } finally {
+    setAppointmentsLoading(false);
+  }
+}
+
+useEffect(() => {
+  if (activeView === "appointments") {
+    loadAppointments();
+  }
+}, [activeView, appointmentStatus, appointmentDate]);
 
   async function handleSendMessage(text = message) {
     const userMessage = text.trim();
@@ -83,8 +122,22 @@ useEffect(() => {
 
         <div className="sidebar-section">
           <p className="section-label">WORKSPACE</p>
-          <button className="nav-item active">◉ &nbsp; Reception</button>
-          <button className="nav-item">▣ &nbsp; Appointments</button>
+          {/* <button className="nav-item active">◉ &nbsp; Reception</button>
+          <button className="nav-item">▣ &nbsp; Appointments</button> */}
+
+          <button
+  className={`nav-item ${activeView === "reception" ? "active" : ""}`}
+  onClick={() => setActiveView("reception")}
+>
+  ◉ &nbsp; Reception
+</button>
+
+<button
+  className={`nav-item ${activeView === "appointments" ? "active" : ""}`}
+  onClick={() => setActiveView("appointments")}
+>
+  ▣ &nbsp; Appointments
+</button>
           <button className="nav-item">◷ &nbsp; Activity</button>
         </div>
 
@@ -100,8 +153,10 @@ useEffect(() => {
       <main className="main-content">
         <header className="topbar">
           <div>
-            <p className="breadcrumb">Workspace / Reception</p>
-            <h1>Reception Desk</h1>
+            <p className="breadcrumb">
+  Workspace / {activeView === "reception" ? "Reception" : "Appointments"}
+</p>
+            <h1>{activeView === "reception" ? "Reception Desk" : "Appointments"}</h1>
           </div>
 
           <div className="topbar-right">
@@ -112,6 +167,7 @@ useEffect(() => {
         </header>
 
         <div className="dashboard">
+          {activeView === "reception" && (
           <section className="conversation-panel">
             <div className="conversation-heading">
               <div>
@@ -223,7 +279,7 @@ useEffect(() => {
             <p className="privacy-note">
               AI-powered assistance · Your conversation is handled securely
             </p>
-          </section>
+          </section> )}
 
           <aside className="right-panel">
             <div className="panel-heading">
