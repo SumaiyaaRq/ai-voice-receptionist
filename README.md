@@ -115,3 +115,24 @@ Once the server is running, open:
 - **OpenAPI Schema:** http://127.0.0.1:8000/openapi.json
 
 Run the frontend using its own development command and configuration.
+
+## API Endpoints
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| GET | `/health` | Checks backend health |
+| POST | `/message` | Processes user messages through the receptionist workflow |
+
+Refer to the Swagger UI for the current request and response schemas.
+
+## Appointment Management
+
+The appointment service is designed to support:
+
+- Checking appointment availability
+- Validating appointment dates and times
+- Rejecting past-date bookings
+- Managing appointment records using SQLite
+- Enforcing business-hour and working-day constraints
+
+The exact booking workflow should be verified against the current implementation before treating every capability as production-ready.
