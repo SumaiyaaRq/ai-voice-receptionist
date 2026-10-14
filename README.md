@@ -136,3 +136,19 @@ The appointment service is designed to support:
 - Enforcing business-hour and working-day constraints
 
 The exact booking workflow should be verified against the current implementation before treating every capability as production-ready.
+
+## Development Roadmap
+
+- [x] Set up the Python project and backend structure
+- [x] Configure FastAPI endpoints
+- [x] Integrate Google Gemini
+- [x] Implement the initial appointment service
+- [x] Add appointment date validation
+- [x] Establish the SQLite database foundation
+- [x] Connect the frontend to the backend
+- [ ] Complete and test the end-to-end appointment workflow
+- [ ] Strengthen Gemini tool-calling and execution handling
+- [ ] Complete appointment booking, cancellation, and rescheduling flows
+- [ ] Add comprehensive automated tests
+- [ ] Integrate voice input and output
+- [ ] Evaluate deployment options
