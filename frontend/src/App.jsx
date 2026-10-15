@@ -41,6 +41,25 @@ const [appointmentsError, setAppointmentsError] = useState("");
 const [appointmentStatus, setAppointmentStatus] = useState("");
 const [appointmentDate, setAppointmentDate] = useState("");
 
+const bookedAppointments = appointments.filter(
+  (appointment) => appointment.status === "booked"
+).length;
+
+const cancelledAppointments = appointments.filter(
+  (appointment) => appointment.status === "cancelled"
+).length;
+
+const [allAppointments, setAllAppointments] = useState([]);
+
+async function loadAllAppointments() {
+  try {
+    const data = await getAppointments();
+    setAllAppointments(data.appointments ?? []);
+  } catch (error) {
+    console.error("Dashboard appointment loading error:", error);
+  }
+}
+
 
 async function loadAppointments() {
   setAppointmentsLoading(true);
@@ -68,9 +87,8 @@ async function loadAppointments() {
 }
 
 useEffect(() => {
-  if (activeView === "appointments") {
-    loadAppointments();
-  }
+  loadAppointments();
+  loadAllAppointments();
 }, [activeView, appointmentStatus, appointmentDate]);
 
   async function handleSendMessage(text = message) {
@@ -126,18 +144,18 @@ useEffect(() => {
           <button className="nav-item">▣ &nbsp; Appointments</button> */}
 
           <button
-  className={`nav-item ${activeView === "reception" ? "active" : ""}`}
-  onClick={() => setActiveView("reception")}
->
-  ◉ &nbsp; Reception
-</button>
+          className={`nav-item ${activeView === "reception" ? "active" : ""}`}
+          onClick={() => setActiveView("reception")}
+          >
+          ◉ &nbsp; Reception
+        </button>
 
-<button
-  className={`nav-item ${activeView === "appointments" ? "active" : ""}`}
-  onClick={() => setActiveView("appointments")}
->
-  ▣ &nbsp; Appointments
-</button>
+        <button
+        className={`nav-item ${activeView === "appointments" ? "active" : ""}`}
+        onClick={() => setActiveView("appointments")}
+        >
+        ▣ &nbsp; Appointments
+        </button>
           <button className="nav-item">◷ &nbsp; Activity</button>
         </div>
 
@@ -154,8 +172,8 @@ useEffect(() => {
         <header className="topbar">
           <div>
             <p className="breadcrumb">
-  Workspace / {activeView === "reception" ? "Reception" : "Appointments"}
-</p>
+            Workspace / {activeView === "reception" ? "Reception" : "Appointments"}
+            </p>
             <h1>{activeView === "reception" ? "Reception Desk" : "Appointments"}</h1>
           </div>
 
@@ -281,6 +299,93 @@ useEffect(() => {
             </p>
           </section> )}
 
+          
+        {activeView === "appointments" && (
+        <section className="conversation-panel appointments-panel">
+        <div className="conversation-heading">
+        <div>
+            <span className="eyebrow">APPOINTMENT MANAGEMENT</span>
+            <h2>All appointments</h2>
+        <p>View, filter, and manage your bookings.</p>
+        </div>
+        <div className="assistant-avatar">▣</div>
+        </div>
+
+      <div className="appointment-filters">
+      <input
+        type="date"
+        value={appointmentDate}
+        onChange={(event) => setAppointmentDate(event.target.value)}
+        aria-label="Filter by appointment date"
+      />
+
+      <select
+        value={appointmentStatus}
+        onChange={(event) => setAppointmentStatus(event.target.value)}
+        aria-label="Filter by appointment status"
+      >
+        <option value="">All statuses</option>
+        <option value="booked">Booked</option>
+        <option value="cancelled">Cancelled</option>
+      </select>
+
+      <button type="button" onClick={loadAppointments}>
+        Refresh
+      </button>
+    </div>
+
+    <div className="appointments-list">
+      {appointmentsLoading ? (
+        <p>Loading appointments...</p>
+      ) : appointmentsError ? (
+        <p role="alert">{appointmentsError}</p>
+      ) : appointments.length === 0 ? (
+        <p>No appointments found for these filters.</p>
+      ) : (
+        appointments.map((appointment) => (
+          <div
+            className="appointment-item"
+            key={appointment.id}
+          >
+            <div className="appointment-info">
+              <strong>
+                {appointment.customer_name || "Customer"}
+              </strong>
+              <p>
+                {appointment.appointment_date} ·{" "}
+                {appointment.appointment_time}
+              </p>
+              <span className="appointment-status">
+                {appointment.status}
+              </span>
+            </div>
+
+            {appointment.status === "booked" && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await cancelAppointment(appointment.id);
+                    await loadAppointments();
+                  } catch (error) {
+                    console.error("Cancellation error:", error);
+                    setAppointmentsError(
+                      "Unable to cancel this appointment. Please try again."
+                    );
+                  }
+                }}
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+        ))
+         )}
+      </div>
+      </section>
+      )}
+
+
           <aside className="right-panel">
             <div className="panel-heading">
               <div>
@@ -294,8 +399,8 @@ useEffect(() => {
               <div className="insight-icon purple">▣</div>
               <div>
                 <span>Today's appointments</span>
-                <h2>—</h2>
-                <small>Connect backend to load data</small>
+                <h2>{bookedAppointments}</h2>
+                <small>{cancelledAppointments} cancelled</small>
               </div>
             </div>
 
