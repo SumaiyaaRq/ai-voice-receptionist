@@ -58,3 +58,18 @@ export async function cancelAppointment(appointmentId) {
 
   return await response.json();
 }
+
+export async function resetSession(sessionId) {
+  const response = await fetch(
+    `${API_BASE_URL}/sessions/${sessionId}`,
+    {
+      method: "DELETE",
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to reset session: ${response.status}`);
+  }
+
+  return await response.json();
+}

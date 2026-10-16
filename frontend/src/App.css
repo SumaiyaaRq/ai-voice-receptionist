@@ -688,6 +688,39 @@ button {
   }
 }
 
+.new-conversation {
+  width: 100%;
+  margin-top: 14px;
+  padding: 11px 14px;
+  border: 1px solid var(--accent-border);
+  border-radius: 9px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease;
+}
+
+.new-conversation:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.new-conversation:active {
+  transform: translateY(0);
+}
+
+.new-conversation:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* Responsive */
 
 @media (max-width: 1050px) {

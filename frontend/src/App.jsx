@@ -1,6 +1,6 @@
 
 import { useState , useEffect, useRef } from "react";
-import { sendMessage ,getAppointments, cancelAppointment} from "./services/api";
+import { sendMessage ,getAppointments, cancelAppointment , resetSession} from "./services/api";
 import "./App.css";
 
 function App() {
@@ -157,6 +157,29 @@ useEffect(() => {
         ▣ &nbsp; Appointments
         </button>
           <button className="nav-item">◷ &nbsp; Activity</button>
+
+          <button
+        className="new-conversation"
+        onClick={async () => {
+        try {
+        await resetSession(sessionId);
+
+        setMessages([
+        {
+          role: "assistant",
+          content:
+            "Hello! Welcome to our reception desk. I can help you book, check, or cancel an appointment. What would you like to do today?",
+        },
+        ]);
+
+      setMessage("");
+      } catch (error) {
+      console.error("Session reset error:", error);
+      }
+      }}
+        >
+       + New Conversation
+        </button>
         </div>
 
         <div className="sidebar-bottom">
