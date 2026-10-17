@@ -152,3 +152,13 @@ The exact booking workflow should be verified against the current implementation
 - [ ] Add comprehensive automated tests
 - [ ] Integrate voice input and output
 - [ ] Evaluate deployment options
+
+
+## Future Scope
+
+- Natural voice-based conversations
+- Automated appointment scheduling
+- Reliable appointment availability and booking workflows
+- Conversation history and session management
+- Improved error handling and validation
+- Deployment for real-world use
