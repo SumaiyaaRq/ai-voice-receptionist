@@ -162,3 +162,20 @@ The exact booking workflow should be verified against the current implementation
 - Conversation history and session management
 - Improved error handling and validation
 - Deployment for real-world use
+
+
+## Learning Objectives
+
+This project provides practical experience with:
+
+- Generative AI and LLM integration
+- Backend development using FastAPI
+- API design and frontend-backend communication
+- Database integration using SQLite
+- Tool calling and AI-driven automation
+- Software testing and application development
+
+---
+
+**Project:** AI Voice Receptionist  
+**Status:** In Development
