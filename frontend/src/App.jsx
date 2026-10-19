@@ -3,6 +3,8 @@ import { useState , useEffect, useRef } from "react";
 import { sendMessage ,getAppointments, cancelAppointment , resetSession} from "./services/api";
 import "./App.css";
 
+  const SpeechRecognition =
+  window.SpeechRecognition || window.webkitSpeechRecognition;
 function App() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
@@ -12,6 +14,7 @@ function App() {
         "Hello! Welcome to our reception desk. I can help you book, check, or cancel an appointment. What would you like to do today?",
     },
   ]);
+
   const chatAreaRef = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -50,6 +53,40 @@ const cancelledAppointments = appointments.filter(
 ).length;
 
 const [allAppointments, setAllAppointments] = useState([]);
+const [isListening, setIsListening] = useState(false);
+
+const startListening = () => {
+  if (!SpeechRecognition) {
+    alert("Speech recognition is not supported in this browser.");
+    return;
+  }
+
+  const recognition = new SpeechRecognition();
+
+  recognition.lang = "en-IN";
+  recognition.interimResults = false;
+  recognition.continuous = false;
+
+  recognition.onstart = () => {
+    setIsListening(true);
+  };
+
+  recognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript;
+    setMessage(transcript);
+  };
+
+  recognition.onerror = (event) => {
+    console.error("Speech recognition error:", event.error);
+    setIsListening(false);
+  };
+
+  recognition.onend = () => {
+    setIsListening(false);
+  };
+
+  recognition.start();
+};
 
 async function loadAllAppointments() {
   try {
@@ -291,12 +328,12 @@ useEffect(() => {
                 handleSendMessage();
               }}
             >
+         
               <button
-                type="button"
-                className="voice-button"
-                title="Voice input"
-              >
-                ♩
+              type="button"
+              className={`voice-button ${isListening ? "listening" : ""}`}
+              title="Voice input"
+              onClick={startListening}> ♩
               </button>
 
               <input
