@@ -408,6 +408,9 @@ useEffect(() => {
             key={appointment.id}
           >
             <div className="appointment-info">
+              <div className="appointment-id">
+              Appointment #{appointment.id}
+            </div>
               <strong>
                 {appointment.customer_name || "Customer"}
               </strong>

@@ -681,6 +681,34 @@ button {
   color: var(--accent);
 }
 
+.appointment-id {
+  font-size: 12px;
+  font-weight: 600;
+  color: #77718d;
+  margin-bottom: 6px;
+  letter-spacing: 0.2px;
+}
+
+.appointment-status {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.appointment-status.booked {
+  background: #eaf7ef;
+  color: #287a4b;
+}
+
+.appointment-status.cancelled {
+  background: #fbecec;
+  color: #a53d3d;
+}
+
 @media (max-width: 700px) {
   .appointment-filters {
     flex-direction: column;

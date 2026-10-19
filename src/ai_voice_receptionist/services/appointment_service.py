@@ -4,21 +4,6 @@ from datetime import  datetime, timedelta
 # Store the database in the project root.
 DB_PATH = Path(__file__).resolve().parents[3] / "appointments.db"
 
-# Temporary business schedule.
-# True = slot offered; False = unavailable from the initial schedule
-# MOCK_APPOINTMENTS = {
-#     "2026-09-29": {
-#         "10:00": True,
-#         "11:00": False,
-#         "15:00": True,
-#         "16:00": False,
-#     },
-#     "2026-10-02": {
-#         "15:00": True,
-#         "16:00": False,
-#     }
-# }
-
 BUSINESS_OPENING_TIME = "09:00"
 BUSINESS_CLOSING_TIME = "17:00"
 
@@ -198,17 +183,20 @@ def book_appointment(
     date: str,
     time: str,
     customer_name: str
-) -> bool:
-    """Save an appointment safely in SQLite."""
+) -> dict:
+    """Save an appointment safely in SQLite and return its ID."""
 
     status = check_availability(date, time)
 
     if status != "available":
-        return False
+        return {
+            "success": False,
+            "appointment_id": None
+        }
 
     try:
         with get_connection() as connection:
-            connection.execute(
+            cursor = connection.execute(
                 """
                 INSERT INTO appointments (
                     customer_name,
@@ -220,15 +208,23 @@ def book_appointment(
                 (customer_name, date, time)
             )
 
+            appointment_id = cursor.lastrowid
+
         print(
             f"Appointment booked for {customer_name} "
             f"on {date} at {time}"
         )
 
-        return True
+        return {
+            "success": True,
+            "appointment_id": appointment_id
+        }
 
     except sqlite3.IntegrityError:
-        return False
+        return {
+            "success": False,
+            "appointment_id": None
+        }
 
 
 def get_appointments(
@@ -281,3 +277,61 @@ def cancel_appointment(appointment_id: int) -> bool:
             (appointment_id,)
         )
         return cursor.rowcount > 0
+
+def get_appointment_by_id(appointment_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT id, customer_name, appointment_date, appointment_time, status
+        FROM appointments
+        WHERE id = ?
+        """,
+        (appointment_id,)
+    )
+
+    appointment = cursor.fetchone()
+
+    conn.close()
+
+    if not appointment:
+        return None
+
+    return {
+        "id": appointment[0],
+        "customer_name": appointment[1],
+        "appointment_date": appointment[2],
+        "appointment_time": appointment[3],
+        "status": appointment[4],
+    }
+
+def reschedule_appointment(
+    appointment_id: int,
+    new_date: str,
+    new_time: str
+) -> bool:
+    """Reschedule an existing booked appointment."""
+
+    status = check_availability(new_date, new_time)
+
+    if status != "available":
+        return False
+
+    try:
+        with get_connection() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE appointments
+                SET appointment_date = ?,
+                    appointment_time = ?
+                WHERE id = ?
+                AND status = 'booked'
+                """,
+                (new_date, new_time, appointment_id)
+            )
+
+            return cursor.rowcount > 0
+
+    except sqlite3.IntegrityError:
+        return False

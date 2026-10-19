@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from ai_voice_receptionist.services.appointment_service import (check_availability , book_appointment ,  validate_appointment_date)
+from ai_voice_receptionist.services.appointment_service import (check_availability , book_appointment ,  validate_appointment_date ,  cancel_appointment , get_appointment_by_id)
 
 load_dotenv()
 today = date.today().isoformat()
@@ -29,6 +29,18 @@ Your responsibilities:
 - If a requested slot is unavailable, explain that it is unavailable and do not proceed with booking.
 - Only ask for the customer's name after an available appointment slot has been confirmed.
 - If the requested date is a closed business day, inform the customer that the business is closed on that day and ask them to choose another date.
+- When an appointment is successfully booked, tell the customer that the booking was successful and provide the appointment ID.
+- Tell the customer to keep the appointment ID for future cancellation or rescheduling.
+- Never provide an appointment ID unless the booking system has returned one.
+- When a customer wants to cancel an appointment, ask for the appointment ID if they have not provided it.
+- Do not claim that an appointment was cancelled unless the cancellation system confirms it.
+- After a successful cancellation, clearly confirm that the appointment has been cancelled.
+- If the appointment ID is invalid or the appointment is already cancelled, explain that the appointment could not be cancelled.
+- When a customer wants to cancel an appointment and provides an appointment ID, first retrieve the appointment details using the appointment lookup tool.
+- Before cancelling, tell the customer the appointment ID, customer name, date, and time and ask them to confirm that it is the correct appointment.
+- Do not call the cancellation tool until the customer explicitly confirms the appointment.
+- If the customer does not confirm, do not cancel the appointment.
+- If no appointment is found for the provided ID, tell the customer that the appointment could not be found.
 """
 
 check_availability_tool = {
@@ -95,7 +107,55 @@ validate_appointment_date_tool = {
         "required": ["date"]
     }
 }
-tools = types.Tool(function_declarations=[check_availability_tool , book_appointment_tool , validate_appointment_date_tool])
+
+
+cancel_appointment_tool = {
+    "name": "cancel_appointment",
+    "description": """
+    Cancel an existing booked appointment.
+
+    Use this when the customer wants to cancel an appointment.
+    The appointment must be identified by its appointment ID.
+
+    The result is:
+    - True: appointment was successfully cancelled.
+    - False: appointment was not found or was already cancelled.
+    """,
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "appointment_id": {
+                "type": "integer",
+                "description": "The ID of the appointment to cancel."
+            }
+        },
+        "required": ["appointment_id"]
+    }
+}
+
+get_appointment_tool = {
+    "name": "get_appointment_by_id",
+    "description": """
+    Find an appointment using its appointment ID.
+
+    Use this when a customer wants to cancel or reschedule an appointment
+    and provides an appointment ID.
+
+    Return the appointment details so they can be confirmed with the customer
+    before any cancellation or rescheduling is performed.
+    """,
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "appointment_id": {
+                "type": "integer",
+                "description": "The ID of the appointment to look up."
+            }
+        },
+        "required": ["appointment_id"]
+    }
+}
+tools = types.Tool(function_declarations=[check_availability_tool , book_appointment_tool , validate_appointment_date_tool ,cancel_appointment_tool , get_appointment_tool])
 
 chats = {}
 
@@ -145,6 +205,16 @@ def generate_response(message: str , session_id:str) -> str:
                 time,
                 customer_name
             )
+
+        elif function_call.name == "get_appointment_by_id":
+            appointment_id = function_call.args["appointment_id"]
+
+            result = get_appointment_by_id(appointment_id)
+
+        elif function_call.name == "cancel_appointment":
+            appointment_id = function_call.args["appointment_id"]
+
+            result = cancel_appointment(appointment_id)
 
         else:
             return "I couldn't process that request."
