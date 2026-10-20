@@ -1,11 +1,12 @@
 import os
 from datetime import date
+from urllib import response
 
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-from ai_voice_receptionist.services.appointment_service import (check_availability , book_appointment ,  validate_appointment_date ,  cancel_appointment , get_appointment_by_id)
+from ai_voice_receptionist.services.appointment_service import (check_availability , book_appointment ,  validate_appointment_date ,  cancel_appointment , get_appointment_by_id , reschedule_appointment)
 
 load_dotenv()
 today = date.today().isoformat()
@@ -41,7 +42,17 @@ Your responsibilities:
 - Do not call the cancellation tool until the customer explicitly confirms the appointment.
 - If the customer does not confirm, do not cancel the appointment.
 - If no appointment is found for the provided ID, tell the customer that the appointment could not be found.
+- When a customer wants to reschedule an appointment, ask for the appointment ID if they have not provided it.
+- When the customer provides an appointment ID for rescheduling, first retrieve the appointment using the appointment lookup tool.
+- Show the customer name, current appointment date, and current appointment time and ask the customer to confirm that it is the correct appointment.
+- Do not reschedule an appointment until the customer confirms the appointment details.
+- After the customer confirms the existing appointment, ask for the new desired date and time.
+- Always check availability of the new date and time before rescheduling.
+- Never reschedule an appointment to an unavailable or invalid slot.
+- Do not call the reschedule tool until the new slot has been confirmed as available.
+- After a successful rescheduling, tell the customer the new appointment date and time and provide the appointment ID.
 """
+
 
 check_availability_tool = {
     "name": "check_availability",
@@ -155,7 +166,42 @@ get_appointment_tool = {
         "required": ["appointment_id"]
     }
 }
-tools = types.Tool(function_declarations=[check_availability_tool , book_appointment_tool , validate_appointment_date_tool ,cancel_appointment_tool , get_appointment_tool])
+
+
+reschedule_appointment_tool = {
+    "name": "reschedule_appointment",
+    "description": """
+    Reschedule an existing booked appointment to a new date and time.
+
+    Use this only after:
+    1. The appointment has been identified using its appointment ID.
+    2. The customer has confirmed that the appointment details are correct.
+    3. The new date and time have been checked for availability.
+
+    The result is:
+    - True: appointment was successfully rescheduled.
+    - False: the new slot is unavailable or the appointment could not be updated.
+    """,
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "appointment_id": {
+                "type": "integer",
+                "description": "The ID of the existing appointment."
+            },
+            "new_date": {
+                "type": "string",
+                "description": "The new appointment date in YYYY-MM-DD format."
+            },
+            "new_time": {
+                "type": "string",
+                "description": "The new appointment time in HH:MM format."
+            }
+        },
+        "required": ["appointment_id", "new_date", "new_time"]
+    }
+}
+tools = types.Tool(function_declarations=[check_availability_tool , book_appointment_tool , validate_appointment_date_tool ,cancel_appointment_tool , get_appointment_tool , reschedule_appointment_tool])
 
 chats = {}
 
@@ -175,10 +221,15 @@ def generate_response(message: str , session_id:str) -> str:
                 "tools": [tools],
             },
         )
-
     chat = chats[session_id]
     response = chat.send_message(message)
-    function_call = response.candidates[0].content.parts[0].function_call
+
+    function_call = None
+
+    for part in response.candidates[0].content.parts:
+        if part.function_call:
+            function_call = part.function_call
+            break
 
     if function_call:
 
@@ -215,6 +266,17 @@ def generate_response(message: str , session_id:str) -> str:
             appointment_id = function_call.args["appointment_id"]
 
             result = cancel_appointment(appointment_id)
+
+        elif function_call.name == "reschedule_appointment":
+            appointment_id = function_call.args["appointment_id"]
+            new_date = function_call.args["new_date"]
+            new_time = function_call.args["new_time"]
+
+            result = reschedule_appointment(
+            appointment_id,
+            new_date,
+            new_time
+        )
 
         else:
             return "I couldn't process that request."
