@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 .env
 .DS_Store
+credentials/
+token.json
 
 # .venv/ →  local virtual environment; don't upload it
 # __pycache__/ → Python-generated cache

@@ -1,6 +1,9 @@
+from multiprocessing.dummy import connection
 import sqlite3
 from pathlib import Path
 from datetime import  datetime, timedelta
+from ai_voice_receptionist.services.calendar_service import create_calendar_event
+from ai_voice_receptionist.services.calendar_service import delete_calendar_event
 # Store the database in the project root.
 DB_PATH = Path(__file__).resolve().parents[3] / "appointments.db"
 
@@ -50,9 +53,21 @@ def initialize_database():
                 appointment_date TEXT NOT NULL,
                 appointment_time TEXT NOT NULL,
                 status TEXT NOT NULL DEFAULT 'booked',
+                calendar_event_id TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        columns = connection.execute(
+        "PRAGMA table_info(appointments)"
+        ).fetchall()
+
+        column_names = [column[1] for column in columns]
+
+        if "calendar_event_id" not in column_names:
+            connection.execute(
+            "ALTER TABLE appointments ADD COLUMN calendar_event_id TEXT"
+        )
 
         indexes = connection.execute(
             "PRAGMA index_list(appointments)"
@@ -75,6 +90,7 @@ def initialize_database():
                     appointment_date TEXT NOT NULL,
                     appointment_time TEXT NOT NULL,
                     status TEXT NOT NULL DEFAULT 'booked',
+                    calendar_event_id TEXT,
                     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
                 )
             """)
@@ -183,49 +199,114 @@ def book_appointment(
     date: str,
     time: str,
     customer_name: str
-) -> dict:
-    """Save an appointment safely in SQLite and return its ID."""
+) -> bool:
+    """Save an appointment in SQLite and Google Calendar."""
 
     status = check_availability(date, time)
 
     if status != "available":
-        return {
-            "success": False,
-            "appointment_id": None
-        }
+        return False
 
     try:
+        calendar_event = create_calendar_event(
+            customer_name,
+            date,
+            time
+        )
+
+        calendar_event_id = calendar_event["event_id"]
+
         with get_connection() as connection:
-            cursor = connection.execute(
+            connection.execute(
                 """
                 INSERT INTO appointments (
                     customer_name,
                     appointment_date,
-                    appointment_time
+                    appointment_time,
+                    status,
+                    calendar_event_id
                 )
-                VALUES (?, ?, ?)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (customer_name, date, time)
+                (
+                    customer_name,
+                    date,
+                    time,
+                    "booked",
+                    calendar_event_id
+                )
             )
-
-            appointment_id = cursor.lastrowid
 
         print(
             f"Appointment booked for {customer_name} "
             f"on {date} at {time}"
         )
 
-        return {
-            "success": True,
-            "appointment_id": appointment_id
-        }
+        return True
 
-    except sqlite3.IntegrityError:
-        return {
-            "success": False,
-            "appointment_id": None
-        }
+    except Exception as error:
+        print(f"Booking error: {error}")
+        return False
+            
+def cancel_appointment(appointment_id: int) -> bool:
+    """Cancel an appointment in Google Calendar and SQLite."""
 
+    appointment = get_appointment_by_id(appointment_id)
+
+    if not appointment:
+        return False
+
+    if appointment["status"] != "booked":
+        return False
+
+    calendar_event_id = appointment.get("calendar_event_id")
+
+    try:
+        if calendar_event_id:
+            delete_calendar_event(calendar_event_id)
+        with get_connection() as connection:
+            cursor = connection.execute(
+            """
+            UPDATE appointments
+            SET status = 'cancelled'
+            WHERE id = ?
+            AND status = 'booked'
+            """,
+            (appointment_id,)
+        )
+        return cursor.rowcount > 0
+    except Exception as error:
+        print(f"Cancellation error: {error}")
+        return False
+
+def get_appointment_by_id(appointment_id: int):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT id, customer_name, appointment_date, appointment_time, status,calendar_event_id
+        FROM appointments
+        WHERE id = ?
+        """,
+        (appointment_id,)
+    )
+
+    appointment = cursor.fetchone()
+
+    conn.close()
+
+    if not appointment:
+        return None
+
+    return {
+        "id": appointment[0],
+        "customer_name": appointment[1],
+        "appointment_date": appointment[2],
+        "appointment_time": appointment[3],
+        "status": appointment[4],
+        "calendar_event_id": appointment[5],
+    }
 
 def get_appointments(
     appointment_date: str = None,
@@ -241,6 +322,7 @@ def get_appointments(
                 appointment_date,
                 appointment_time,
                 status,
+                calendar_event_id,
                 created_at
             FROM appointments
             WHERE 1=1
@@ -264,47 +346,7 @@ def get_appointments(
         ).fetchall()
 
     return [dict(record) for record in records]
-            
-def cancel_appointment(appointment_id: int) -> bool:
-    with get_connection() as connection:
-        cursor = connection.execute(
-            """
-            UPDATE appointments
-            SET status = 'cancelled'
-            WHERE id = ?
-            AND status = 'booked'
-            """,
-            (appointment_id,)
-        )
-        return cursor.rowcount > 0
 
-def get_appointment_by_id(appointment_id: int):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    cursor.execute(
-        """
-        SELECT id, customer_name, appointment_date, appointment_time, status
-        FROM appointments
-        WHERE id = ?
-        """,
-        (appointment_id,)
-    )
-
-    appointment = cursor.fetchone()
-
-    conn.close()
-
-    if not appointment:
-        return None
-
-    return {
-        "id": appointment[0],
-        "customer_name": appointment[1],
-        "appointment_date": appointment[2],
-        "appointment_time": appointment[3],
-        "status": appointment[4],
-    }
 
 def reschedule_appointment(
     appointment_id: int,

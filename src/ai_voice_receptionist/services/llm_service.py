@@ -1,6 +1,5 @@
 import os
 from datetime import date
-from urllib import response
 
 from dotenv import load_dotenv
 from google import genai
@@ -204,13 +203,17 @@ reschedule_appointment_tool = {
 tools = types.Tool(function_declarations=[check_availability_tool , book_appointment_tool , validate_appointment_date_tool ,cancel_appointment_tool , get_appointment_tool , reschedule_appointment_tool])
 
 chats = {}
+pending_cancellations = {}
 
 def reset_session(session_id: str) -> bool:
+    removed = False
     if session_id in chats:
         del chats[session_id]
-        return True
-
-    return False
+        removed =  True
+    if session_id in pending_cancellations:
+        del pending_cancellations[session_id]
+        removed = True
+    return removed
 
 def generate_response(message: str , session_id:str) -> str:
     if session_id not in chats:
@@ -222,6 +225,49 @@ def generate_response(message: str , session_id:str) -> str:
             },
         )
     chat = chats[session_id]
+    if session_id in pending_cancellations:
+        confirmation = message.strip().lower()
+
+        positive_confirmations = {
+        "yes",
+        "yes please",
+        "confirm",
+        "confirmed",
+        "correct",
+        "go ahead",
+        "cancel it",
+        "please cancel",
+    }
+
+        negative_confirmations = {
+        "no",
+        "no thanks",
+        "don't cancel",
+        "do not cancel",
+        "keep it",
+        "keep the appointment",
+    }
+
+        if confirmation in positive_confirmations:
+            appointment_id = pending_cancellations.pop(session_id)
+
+            result = cancel_appointment(appointment_id)
+
+            if result:
+                return (
+                f"Appointment {appointment_id} has been successfully cancelled."
+            )
+
+            return (
+            f"I couldn't cancel appointment {appointment_id}. "
+            "It may have already been cancelled or could not be found."
+        )
+
+        if confirmation in negative_confirmations:
+            pending_cancellations.pop(session_id)
+
+            return "Okay, I won't cancel the appointment."
+    
     response = chat.send_message(message)
 
     function_call = None
@@ -261,6 +307,8 @@ def generate_response(message: str , session_id:str) -> str:
             appointment_id = function_call.args["appointment_id"]
 
             result = get_appointment_by_id(appointment_id)
+            if result:
+                pending_cancellations[session_id] = appointment_id
 
         elif function_call.name == "cancel_appointment":
             appointment_id = function_call.args["appointment_id"]
