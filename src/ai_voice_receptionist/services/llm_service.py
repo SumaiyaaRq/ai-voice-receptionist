@@ -50,6 +50,13 @@ Your responsibilities:
 - Never reschedule an appointment to an unavailable or invalid slot.
 - Do not call the reschedule tool until the new slot has been confirmed as available.
 - After a successful rescheduling, tell the customer the new appointment date and time and provide the appointment ID.
+- When a customer wants to reschedule an appointment, ask for the appointment ID, new date, and new time.
+- Before rescheduling, retrieve the existing appointment and check that the new date and time are available.
+- Before actually rescheduling, tell the customer the current appointment details and the requested new date and time, and ask for explicit confirmation.
+- Do not reschedule an appointment until the customer explicitly confirms the change.
+- If the customer does not confirm, do not modify the appointment.
+- Never claim that an appointment was rescheduled unless the rescheduling system confirms it.
+- After a successful rescheduling, clearly confirm the new appointment date and time.
 """
 
 
@@ -168,18 +175,17 @@ get_appointment_tool = {
 
 
 reschedule_appointment_tool = {
-    "name": "reschedule_appointment",
+    "name": "prepare_reschedule",
     "description": """
-    Reschedule an existing booked appointment to a new date and time.
+    Prepare an appointment for rescheduling.
 
-    Use this only after:
-    1. The appointment has been identified using its appointment ID.
-    2. The customer has confirmed that the appointment details are correct.
-    3. The new date and time have been checked for availability.
+    Use this when the customer wants to reschedule an existing appointment
+    and has provided the appointment ID, new date, and new time.
 
-    The result is:
-    - True: appointment was successfully rescheduled.
-    - False: the new slot is unavailable or the appointment could not be updated.
+    First retrieve the existing appointment details using get_appointment_by_id.
+    Then prepare the reschedule details for customer confirmation.
+
+    Do not actually reschedule the appointment.
     """,
     "parameters": {
         "type": "object",
@@ -204,6 +210,7 @@ tools = types.Tool(function_declarations=[check_availability_tool , book_appoint
 
 chats = {}
 pending_cancellations = {}
+pending_reschedules = {}
 
 def reset_session(session_id: str) -> bool:
     removed = False
@@ -213,9 +220,13 @@ def reset_session(session_id: str) -> bool:
     if session_id in pending_cancellations:
         del pending_cancellations[session_id]
         removed = True
+
+    if session_id in pending_reschedules:
+        del pending_reschedules[session_id]
+        removed = True
     return removed
 
-def generate_response(message: str , session_id:str) -> str:
+def generate_response(message: str, session_id: str) -> str:
     if session_id not in chats:
         chats[session_id] = client.chats.create(
             model="gemini-2.5-flash",
@@ -224,29 +235,35 @@ def generate_response(message: str , session_id:str) -> str:
                 "tools": [tools],
             },
         )
+
     chat = chats[session_id]
+
+    # ---------------------------------------------------------
+    # CANCELLATION CONFIRMATION
+    # ---------------------------------------------------------
+
     if session_id in pending_cancellations:
         confirmation = message.strip().lower()
 
         positive_confirmations = {
-        "yes",
-        "yes please",
-        "confirm",
-        "confirmed",
-        "correct",
-        "go ahead",
-        "cancel it",
-        "please cancel",
-    }
+            "yes",
+            "yes please",
+            "confirm",
+            "confirmed",
+            "correct",
+            "go ahead",
+            "cancel it",
+            "please cancel",
+        }
 
         negative_confirmations = {
-        "no",
-        "no thanks",
-        "don't cancel",
-        "do not cancel",
-        "keep it",
-        "keep the appointment",
-    }
+            "no",
+            "no thanks",
+            "don't cancel",
+            "do not cancel",
+            "keep it",
+            "keep the appointment",
+        }
 
         if confirmation in positive_confirmations:
             appointment_id = pending_cancellations.pop(session_id)
@@ -255,19 +272,78 @@ def generate_response(message: str , session_id:str) -> str:
 
             if result:
                 return (
-                f"Appointment {appointment_id} has been successfully cancelled."
-            )
+                    f"Appointment {appointment_id} has been successfully cancelled."
+                )
 
             return (
-            f"I couldn't cancel appointment {appointment_id}. "
-            "It may have already been cancelled or could not be found."
-        )
+                f"I couldn't cancel appointment {appointment_id}. "
+                "It may have already been cancelled or could not be found."
+            )
 
         if confirmation in negative_confirmations:
             pending_cancellations.pop(session_id)
 
             return "Okay, I won't cancel the appointment."
-    
+
+    # ---------------------------------------------------------
+    # RESCHEDULING CONFIRMATION
+    # ---------------------------------------------------------
+
+    if session_id in pending_reschedules:
+        confirmation = message.strip().lower()
+
+        positive_confirmations = {
+            "yes",
+            "yes please",
+            "confirm",
+            "confirmed",
+            "correct",
+            "go ahead",
+            "reschedule it",
+            "please reschedule",
+        }
+
+        negative_confirmations = {
+            "no",
+            "no thanks",
+            "don't reschedule",
+            "do not reschedule",
+            "keep it",
+            "keep the appointment",
+        }
+
+        if confirmation in positive_confirmations:
+            reschedule_data = pending_reschedules.pop(session_id)
+
+            result = reschedule_appointment(
+                reschedule_data["appointment_id"],
+                reschedule_data["new_date"],
+                reschedule_data["new_time"]
+            )
+
+            if result:
+                return (
+                    f"Appointment {reschedule_data['appointment_id']} "
+                    f"has been successfully rescheduled to "
+                    f"{reschedule_data['new_date']} at "
+                    f"{reschedule_data['new_time']}."
+                )
+
+            return (
+                f"I couldn't reschedule appointment "
+                f"{reschedule_data['appointment_id']}. "
+                "The requested slot may no longer be available."
+            )
+
+        if confirmation in negative_confirmations:
+            pending_reschedules.pop(session_id)
+
+            return "Okay, I won't reschedule the appointment."
+
+    # ---------------------------------------------------------
+    # SEND MESSAGE TO GEMINI
+    # ---------------------------------------------------------
+
     response = chat.send_message(message)
 
     function_call = None
@@ -277,8 +353,11 @@ def generate_response(message: str , session_id:str) -> str:
             function_call = part.function_call
             break
 
-    if function_call:
+    # ---------------------------------------------------------
+    # HANDLE FUNCTION CALL
+    # ---------------------------------------------------------
 
+    if function_call:
 
         if function_call.name == "validate_appointment_date":
             date = function_call.args["date"]
@@ -290,7 +369,6 @@ def generate_response(message: str , session_id:str) -> str:
             time = function_call.args["time"]
 
             result = check_availability(date, time)
-
 
         elif function_call.name == "book_appointment":
             date = function_call.args["date"]
@@ -307,43 +385,89 @@ def generate_response(message: str , session_id:str) -> str:
             appointment_id = function_call.args["appointment_id"]
 
             result = get_appointment_by_id(appointment_id)
+
             if result:
                 pending_cancellations[session_id] = appointment_id
+
+        elif function_call.name == "prepare_reschedule":
+            appointment_id = function_call.args["appointment_id"]
+            new_date = function_call.args["new_date"]
+            new_time = function_call.args["new_time"]
+
+            appointment = get_appointment_by_id(appointment_id)
+
+            if not appointment:
+                result = {
+                    "success": False,
+                    "message": "No appointment was found with that ID."
+                }
+
+            elif appointment["status"] != "booked":
+                result = {
+                    "success": False,
+                    "message": "This appointment is not currently booked."
+                }
+
+            else:
+                availability = check_availability(
+                    new_date,
+                    new_time
+                )
+
+                if availability != "available":
+                    result = {
+                        "success": False,
+                        "message": (
+                            "The requested new appointment slot "
+                            f"is not available. Availability status: "
+                            f"{availability}"
+                        )
+                    }
+
+                else:
+                    pending_reschedules[session_id] = {
+                        "appointment_id": appointment_id,
+                        "new_date": new_date,
+                        "new_time": new_time
+                    }
+
+                    result = {
+                        "success": True,
+                        "appointment_id": appointment_id,
+                        "customer_name": appointment["customer_name"],
+                        "current_date": appointment["appointment_date"],
+                        "current_time": appointment["appointment_time"],
+                        "new_date": new_date,
+                        "new_time": new_time,
+                        "message": (
+                            "The new appointment details are ready "
+                            "for customer confirmation."
+                        )
+                    }
 
         elif function_call.name == "cancel_appointment":
             appointment_id = function_call.args["appointment_id"]
 
             result = cancel_appointment(appointment_id)
 
-        elif function_call.name == "reschedule_appointment":
-            appointment_id = function_call.args["appointment_id"]
-            new_date = function_call.args["new_date"]
-            new_time = function_call.args["new_time"]
-
-            result = reschedule_appointment(
-            appointment_id,
-            new_date,
-            new_time
-        )
-
         else:
             return "I couldn't process that request."
-        
+
+        # -----------------------------------------------------
+        # SEND FUNCTION RESULT BACK TO GEMINI
+        # -----------------------------------------------------
+
         function_response_part = types.Part.from_function_response(
-                name=function_call.name,
-                response={
-                    "result": result
-                },
-            )
+            name=function_call.name,
+            response={
+                "result": result
+            },
+        )
 
         final_response = chat.send_message(
-                function_response_part,
-            )
+            function_response_part,
+        )
 
         return final_response.text
 
     return response.text
-    
-
-
-

@@ -98,3 +98,44 @@ def delete_calendar_event(event_id: str):
     ).execute()
 
     return True
+
+def update_calendar_event(
+    event_id: str,
+    customer_name: str,
+    appointment_date: str,
+    appointment_time: str
+):
+    """Update an existing appointment event in Google Calendar."""
+
+    service = get_calendar_service()
+
+    start_datetime = datetime.strptime(
+        f"{appointment_date} {appointment_time}",
+        "%Y-%m-%d %H:%M"
+    )
+
+    end_datetime = start_datetime + timedelta(minutes=60)
+
+    event = {
+        "summary": f"Appointment - {customer_name}",
+        "description": f"Appointment for {customer_name}",
+        "start": {
+            "dateTime": start_datetime.isoformat(),
+            "timeZone": "Asia/Kolkata",
+        },
+        "end": {
+            "dateTime": end_datetime.isoformat(),
+            "timeZone": "Asia/Kolkata",
+        },
+    }
+
+    updated_event = service.events().update(
+        calendarId=os.getenv("GOOGLE_CALENDAR_ID"),
+        eventId=event_id,
+        body=event
+    ).execute()
+
+    return {
+        "event_id": updated_event["id"],
+        "event_link": updated_event.get("htmlLink"),
+    }

@@ -2,8 +2,7 @@ from multiprocessing.dummy import connection
 import sqlite3
 from pathlib import Path
 from datetime import  datetime, timedelta
-from ai_voice_receptionist.services.calendar_service import create_calendar_event
-from ai_voice_receptionist.services.calendar_service import delete_calendar_event
+from ai_voice_receptionist.services.calendar_service import (create_calendar_event, delete_calendar_event,update_calendar_event,)
 # Store the database in the project root.
 DB_PATH = Path(__file__).resolve().parents[3] / "appointments.db"
 
@@ -353,14 +352,32 @@ def reschedule_appointment(
     new_date: str,
     new_time: str
 ) -> bool:
-    """Reschedule an existing booked appointment."""
+    """Reschedule an existing appointment in Google Calendar and SQLite."""
 
-    status = check_availability(new_date, new_time)
+    appointment = get_appointment_by_id(appointment_id)
 
-    if status != "available":
+    if not appointment:
         return False
 
+    if appointment["status"] != "booked":
+        return False
+
+    availability = check_availability(new_date, new_time)
+
+    if availability != "available":
+        return False
+
+    calendar_event_id = appointment.get("calendar_event_id")
+
     try:
+        if calendar_event_id:
+            update_calendar_event(
+                calendar_event_id,
+                appointment["customer_name"],
+                new_date,
+                new_time
+            )
+
         with get_connection() as connection:
             cursor = connection.execute(
                 """
@@ -370,10 +387,15 @@ def reschedule_appointment(
                 WHERE id = ?
                 AND status = 'booked'
                 """,
-                (new_date, new_time, appointment_id)
+                (
+                    new_date,
+                    new_time,
+                    appointment_id
+                )
             )
 
             return cursor.rowcount > 0
 
-    except sqlite3.IntegrityError:
+    except Exception as error:
+        print(f"Rescheduling error: {error}")
         return False
