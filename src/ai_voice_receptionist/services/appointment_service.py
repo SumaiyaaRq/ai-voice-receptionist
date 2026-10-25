@@ -284,7 +284,13 @@ def get_appointment_by_id(appointment_id: int):
 
     cursor.execute(
         """
-        SELECT id, customer_name, appointment_date, appointment_time, status,calendar_event_id
+        SELECT
+            id,
+            customer_name,
+            appointment_date,
+            appointment_time,
+            status,
+            calendar_event_id
         FROM appointments
         WHERE id = ?
         """,
@@ -369,14 +375,16 @@ def reschedule_appointment(
 
     calendar_event_id = appointment.get("calendar_event_id")
 
+    if not calendar_event_id:
+        return False
+
     try:
-        if calendar_event_id:
-            update_calendar_event(
-                calendar_event_id,
-                appointment["customer_name"],
-                new_date,
-                new_time
-            )
+        update_calendar_event(
+            calendar_event_id,
+            appointment["customer_name"],
+            new_date,
+            new_time
+        )
 
         with get_connection() as connection:
             cursor = connection.execute(

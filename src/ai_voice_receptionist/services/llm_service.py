@@ -1,3 +1,4 @@
+from email.mime import message
 import os
 from datetime import date
 
@@ -206,11 +207,35 @@ reschedule_appointment_tool = {
         "required": ["appointment_id", "new_date", "new_time"]
     }
 }
-tools = types.Tool(function_declarations=[check_availability_tool , book_appointment_tool , validate_appointment_date_tool ,cancel_appointment_tool , get_appointment_tool , reschedule_appointment_tool])
+
+# prepare_reschedule_appointment_tool = {
+#     "name": "prepare_reschedule_appointment",
+#     "description": """
+#     Start the rescheduling process for an existing appointment.
+
+#     Use this when the customer wants to reschedule and provides an
+#     appointment ID.
+
+#     Retrieve the appointment details and remember the appointment ID.
+#     Do not change the appointment yet.
+#     """,
+#     "parameters": {
+#         "type": "object",
+#         "properties": {
+#             "appointment_id": {
+#                 "type": "integer",
+#                 "description": "The ID of the appointment to reschedule."
+#             }
+#         },
+#         "required": ["appointment_id"]
+#     }
+# }
+tools = types.Tool(function_declarations=[check_availability_tool , book_appointment_tool , validate_appointment_date_tool ,cancel_appointment_tool , get_appointment_tool ,reschedule_appointment_tool ])
 
 chats = {}
 pending_cancellations = {}
 pending_reschedules = {}
+# pending_reschedule_appointments = {}
 
 def reset_session(session_id: str) -> bool:
     removed = False
@@ -226,7 +251,73 @@ def reset_session(session_id: str) -> bool:
         removed = True
     return removed
 
+def handle_reschedule_confirmation(
+    message: str,
+    session_id: str
+):
+    if session_id not in pending_reschedules:
+        return None
+
+    confirmation = message.strip().lower()
+
+    positive_confirmations = {
+        "yes",
+        "yes please",
+        "confirm",
+        "confirmed",
+        "correct",
+        "go ahead",
+        "reschedule it",
+        "please reschedule",
+    }
+
+    negative_confirmations = {
+        "no",
+        "no thanks",
+        "don't reschedule",
+        "do not reschedule",
+        "keep it",
+        "keep the appointment",
+    }
+
+    if confirmation in positive_confirmations:
+
+        reschedule_data = pending_reschedules.pop(session_id)
+
+        result = reschedule_appointment(
+            reschedule_data["appointment_id"],
+            reschedule_data["new_date"],
+            reschedule_data["new_time"]
+        )
+
+        if result:
+            return (
+                f"Appointment {reschedule_data['appointment_id']} "
+                f"has been successfully rescheduled to "
+                f"{reschedule_data['new_date']} at "
+                f"{reschedule_data['new_time']}."
+            )
+
+        return (
+            f"I couldn't reschedule appointment "
+            f"{reschedule_data['appointment_id']}. "
+            "The requested slot may no longer be available."
+        )
+
+    if confirmation in negative_confirmations:
+
+        pending_reschedules.pop(session_id)
+
+        return "Okay, I won't reschedule the appointment."
+
+    return None
+
 def generate_response(message: str, session_id: str) -> str:
+
+    # ---------------------------------------------------------
+    # CREATE / GET CHAT SESSION
+    # ---------------------------------------------------------
+
     if session_id not in chats:
         chats[session_id] = client.chats.create(
             model="gemini-2.5-flash",
@@ -238,11 +329,21 @@ def generate_response(message: str, session_id: str) -> str:
 
     chat = chats[session_id]
 
+    confirmation_response = handle_reschedule_confirmation(
+    message,
+    session_id
+)
+
+    if confirmation_response is not None:
+        return confirmation_response        
+
     # ---------------------------------------------------------
     # CANCELLATION CONFIRMATION
     # ---------------------------------------------------------
 
     if session_id in pending_cancellations:
+        print("DEBUG: checking pending reschedule:", pending_reschedules)
+
         confirmation = message.strip().lower()
 
         positive_confirmations = {
@@ -266,13 +367,15 @@ def generate_response(message: str, session_id: str) -> str:
         }
 
         if confirmation in positive_confirmations:
+
             appointment_id = pending_cancellations.pop(session_id)
 
             result = cancel_appointment(appointment_id)
 
             if result:
                 return (
-                    f"Appointment {appointment_id} has been successfully cancelled."
+                    f"Appointment {appointment_id} "
+                    "has been successfully cancelled."
                 )
 
             return (
@@ -281,15 +384,17 @@ def generate_response(message: str, session_id: str) -> str:
             )
 
         if confirmation in negative_confirmations:
+
             pending_cancellations.pop(session_id)
 
             return "Okay, I won't cancel the appointment."
 
     # ---------------------------------------------------------
-    # RESCHEDULING CONFIRMATION
+    # FINAL RESCHEDULING CONFIRMATION
     # ---------------------------------------------------------
 
     if session_id in pending_reschedules:
+
         confirmation = message.strip().lower()
 
         positive_confirmations = {
@@ -313,6 +418,7 @@ def generate_response(message: str, session_id: str) -> str:
         }
 
         if confirmation in positive_confirmations:
+
             reschedule_data = pending_reschedules.pop(session_id)
 
             result = reschedule_appointment(
@@ -336,12 +442,13 @@ def generate_response(message: str, session_id: str) -> str:
             )
 
         if confirmation in negative_confirmations:
+
             pending_reschedules.pop(session_id)
 
             return "Okay, I won't reschedule the appointment."
 
     # ---------------------------------------------------------
-    # SEND MESSAGE TO GEMINI
+    # SEND USER MESSAGE TO GEMINI
     # ---------------------------------------------------------
 
     response = chat.send_message(message)
@@ -349,6 +456,7 @@ def generate_response(message: str, session_id: str) -> str:
     function_call = None
 
     for part in response.candidates[0].content.parts:
+
         if part.function_call:
             function_call = part.function_call
             break
@@ -359,18 +467,36 @@ def generate_response(message: str, session_id: str) -> str:
 
     if function_call:
 
+        # -----------------------------------------------------
+        # VALIDATE APPOINTMENT DATE
+        # -----------------------------------------------------
+
         if function_call.name == "validate_appointment_date":
+
             date = function_call.args["date"]
 
             result = validate_appointment_date(date)
 
+        # -----------------------------------------------------
+        # CHECK AVAILABILITY
+        # -----------------------------------------------------
+
         elif function_call.name == "check_availability":
+
             date = function_call.args["date"]
             time = function_call.args["time"]
 
-            result = check_availability(date, time)
+            result = check_availability(
+                date,
+                time
+            )
+
+        # -----------------------------------------------------
+        # BOOK APPOINTMENT
+        # -----------------------------------------------------
 
         elif function_call.name == "book_appointment":
+
             date = function_call.args["date"]
             time = function_call.args["time"]
             customer_name = function_call.args["customer_name"]
@@ -381,55 +507,78 @@ def generate_response(message: str, session_id: str) -> str:
                 customer_name
             )
 
+        # -----------------------------------------------------
+        # LOOK UP APPOINTMENT
+        # -----------------------------------------------------
+
         elif function_call.name == "get_appointment_by_id":
+
             appointment_id = function_call.args["appointment_id"]
 
-            result = get_appointment_by_id(appointment_id)
+            result = get_appointment_by_id(
+                appointment_id
+            )
 
-            if result:
-                pending_cancellations[session_id] = appointment_id
+        # -----------------------------------------------------
+        # PREPARE RESCHEDULING
+        # -----------------------------------------------------
 
         elif function_call.name == "prepare_reschedule":
+
             appointment_id = function_call.args["appointment_id"]
             new_date = function_call.args["new_date"]
             new_time = function_call.args["new_time"]
 
-            appointment = get_appointment_by_id(appointment_id)
+            appointment = get_appointment_by_id(
+                appointment_id
+            )
 
             if not appointment:
+
                 result = {
                     "success": False,
-                    "message": "No appointment was found with that ID."
+                    "message": (
+                        f"No appointment was found "
+                        f"with ID {appointment_id}."
+                    )
                 }
 
             elif appointment["status"] != "booked":
+
                 result = {
                     "success": False,
-                    "message": "This appointment is not currently booked."
+                    "message": (
+                        "This appointment is not currently booked."
+                    )
                 }
 
             else:
+
                 availability = check_availability(
                     new_date,
                     new_time
                 )
 
                 if availability != "available":
+
                     result = {
                         "success": False,
                         "message": (
                             "The requested new appointment slot "
-                            f"is not available. Availability status: "
-                            f"{availability}"
+                            "is not available."
                         )
                     }
 
                 else:
+
+                    # Store the rescheduling request.
                     pending_reschedules[session_id] = {
                         "appointment_id": appointment_id,
                         "new_date": new_date,
                         "new_time": new_time
                     }
+
+                    print("DEBUG: pending reschedule created:", pending_reschedules)
 
                     result = {
                         "success": True,
@@ -445,12 +594,20 @@ def generate_response(message: str, session_id: str) -> str:
                         )
                     }
 
+        # -----------------------------------------------------
+        # CANCEL APPOINTMENT
+        # -----------------------------------------------------
+
         elif function_call.name == "cancel_appointment":
+
             appointment_id = function_call.args["appointment_id"]
 
-            result = cancel_appointment(appointment_id)
+            result = cancel_appointment(
+                appointment_id
+            )
 
         else:
+
             return "I couldn't process that request."
 
         # -----------------------------------------------------
@@ -465,7 +622,7 @@ def generate_response(message: str, session_id: str) -> str:
         )
 
         final_response = chat.send_message(
-            function_response_part,
+            function_response_part
         )
 
         return final_response.text
