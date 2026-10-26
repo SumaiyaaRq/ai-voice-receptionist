@@ -1,10 +1,11 @@
 
 import { useState , useEffect, useRef } from "react";
 import { sendMessage ,getAppointments, cancelAppointment , resetSession} from "./services/api";
+import { speak } from "./services/speech";
 import "./App.css";
 
-  const SpeechRecognition =
-  window.SpeechRecognition || window.webkitSpeechRecognition;
+const SpeechRecognition =
+window.SpeechRecognition || window.webkitSpeechRecognition;
 function App() {
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
@@ -18,16 +19,11 @@ function App() {
   const chatAreaRef = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const [sessionId] = useState(() => {
-    return (
-      sessionStorage.getItem("voxa_session_id") ||
-      (() => {
-        const id = crypto.randomUUID();
-        sessionStorage.setItem("voxa_session_id", id);
-        return id;
-      })()
-    );
-  });
+ const [sessionId, setSessionId] = useState(() => {
+  const id = crypto.randomUUID();
+  sessionStorage.setItem("voxa_session_id", id);
+  return id;
+});
 
 useEffect(() => {
   const chatArea = chatAreaRef.current;
@@ -71,10 +67,13 @@ const startListening = () => {
     setIsListening(true);
   };
 
-  recognition.onresult = (event) => {
-    const transcript = event.results[0][0].transcript;
-    setMessage(transcript);
-  };
+recognition.onresult = async (event) => {
+  const transcript = event.results[0][0].transcript;
+
+  setMessage(transcript);
+
+  await handleSendMessage(transcript);
+};
 
   recognition.onerror = (event) => {
     console.error("Speech recognition error:", event.error);
@@ -148,6 +147,7 @@ useEffect(() => {
         ...previous,
         { role: "assistant", content: data.response },
       ]);
+      speak(data.response);
     } catch (error) {
       console.error("Chat API error:", error);
 
@@ -425,18 +425,32 @@ useEffect(() => {
 
             {appointment.status === "booked" && (
               <button
-                type="button"
                 onClick={async () => {
-                  try {
-                    await cancelAppointment(appointment.id);
-                    await loadAppointments();
-                  } catch (error) {
-                    console.error("Cancellation error:", error);
-                    setAppointmentsError(
-                      "Unable to cancel this appointment. Please try again."
-                    );
-                  }
-                }}
+                try {
+                await resetSession(sessionId);
+
+                const newSessionId = crypto.randomUUID();
+
+                sessionStorage.setItem(
+                  "voxa_session_id",
+                  newSessionId
+                );
+              
+                setSessionId(newSessionId);
+              
+                setMessages([
+                  {
+                    role: "assistant",
+                    content:
+                      "Hello! Welcome to our reception desk. I can help you book, check, or cancel an appointment. What would you like to do today?",
+                  },
+                ]);
+
+                  setMessage("");
+                } catch (error) {
+                  console.error("Session reset error:", error);
+                }
+              }}
               >
                 Cancel
               </button>

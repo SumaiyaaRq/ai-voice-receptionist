@@ -571,28 +571,24 @@ def generate_response(message: str, session_id: str) -> str:
 
                 else:
 
-                    # Store the rescheduling request.
                     pending_reschedules[session_id] = {
-                        "appointment_id": appointment_id,
-                        "new_date": new_date,
-                        "new_time": new_time
+                    "appointment_id": appointment_id,
+                    "new_date": new_date,
+                    "new_time": new_time
                     }
 
-                    print("DEBUG: pending reschedule created:", pending_reschedules)
+                print(
+                    "DEBUG: pending reschedule created:",
+                                        pending_reschedules
+                            )
 
-                    result = {
-                        "success": True,
-                        "appointment_id": appointment_id,
-                        "customer_name": appointment["customer_name"],
-                        "current_date": appointment["appointment_date"],
-                        "current_time": appointment["appointment_time"],
-                        "new_date": new_date,
-                        "new_time": new_time,
-                        "message": (
-                            "The new appointment details are ready "
-                            "for customer confirmation."
-                        )
-                    }
+                return (
+        f"The appointment for {appointment['customer_name']} "
+        f"on {appointment['appointment_date']} at "
+        f"{appointment['appointment_time']} will be "
+        f"rescheduled to {new_date} at {new_time}. "
+        "Is this correct?"
+    )
 
         # -----------------------------------------------------
         # CANCEL APPOINTMENT
@@ -622,8 +618,10 @@ def generate_response(message: str, session_id: str) -> str:
         )
 
         final_response = chat.send_message(
-            function_response_part
-        )
+        function_response_part)
+
+
+        print("DEBUG FINAL GEMINI RESPONSE:", final_response)
 
         return final_response.text
 
