@@ -28,6 +28,14 @@ Package Management: uv
 
 Environment Management: python-dotenv
 
+## Database
+
+The project currently uses **SQLite** for local appointment data storage.
+
+The database is used by the appointment service to store and manage appointment-related information.
+
+The database design will be extended as the appointment-management functionality evolves.
+
 ## Current Features
 
 FastAPI backend with API endpoints.
