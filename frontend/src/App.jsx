@@ -15,11 +15,13 @@ function App() {
         "Hello! Welcome to our reception desk. I can help you book, check, or cancel an appointment. What would you like to do today?",
     },
   ]);
-
+  
   const chatAreaRef = useRef(null);
+  const conversationVersionRef = useRef(0);
+  const requestControllerRef = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
 
- const [sessionId, setSessionId] = useState(() => {
+  const [sessionId, setSessionId] = useState(() => {
   const id = crypto.randomUUID();
   sessionStorage.setItem("voxa_session_id", id);
   return id;
@@ -76,9 +78,28 @@ recognition.onresult = async (event) => {
 };
 
   recognition.onerror = (event) => {
-    console.error("Speech recognition error:", event.error);
-    setIsListening(false);
-  };
+  console.error("Speech recognition error:", event.error);
+  setIsListening(false);
+
+  let errorMessage = "";
+
+  if (event.error === "not-allowed") {
+    errorMessage =
+      "Microphone access was denied. Please allow microphone access in your browser settings.";
+  } else if (event.error === "no-speech") {
+    errorMessage = "I couldn't hear anything. Please try speaking again.";
+  } else if (event.error === "network") {
+    errorMessage =
+      "Voice recognition encountered a network error. Please try again.";
+  }
+
+  if (errorMessage) {
+    setMessages((previous) => [
+      ...previous,
+      { role: "assistant", content: errorMessage },
+    ]);
+  }
+};
 
   recognition.onend = () => {
     setIsListening(false);
@@ -131,6 +152,7 @@ useEffect(() => {
     const userMessage = text.trim();
 
     if (!userMessage || isLoading) return;
+    const requestVersion = conversationVersionRef.current;
 
     setMessages((previous) => [
       ...previous,
@@ -141,7 +163,13 @@ useEffect(() => {
     setIsLoading(true);
 
     try {
-      const data = await sendMessage(sessionId, userMessage);
+      const controller = new AbortController();
+      requestControllerRef.current = controller;
+
+        const data = await sendMessage(
+          sessionId,
+          userMessage,
+          controller.signal);
 
       setMessages((previous) => [
         ...previous,
@@ -149,18 +177,39 @@ useEffect(() => {
       ]);
       speak(data.response);
     } catch (error) {
-      console.error("Chat API error:", error);
+  if (
+    error.name === "AbortError" ||
+    requestVersion !== conversationVersionRef.current
+  ) {
+    return;
+  }
 
-      setMessages((previous) => [
-        ...previous,
-        {
-          role: "assistant",
-          content:
-            "I'm sorry, I couldn't connect to the receptionist service. Please check whether the backend is running and try again.",
-        },
-      ]);
-    } finally {
-      setIsLoading(false);
+  if (error.name === "TimeoutError") {
+    setMessages((previous) => [
+      ...previous,
+      {
+        role: "assistant",
+        content:
+          "The request took too long. Please try again.",
+      },
+    ]);
+    return;
+  }
+
+  console.error("Chat API error:", error);
+
+  setMessages((previous) => [
+    ...previous,
+    {
+      role: "assistant",
+      content:
+        "I'm sorry, I couldn't connect to the receptionist service. Please check whether the backend is running and try again.",
+    },
+  ]);
+} finally {
+      if (requestVersion === conversationVersionRef.current) {
+        setIsLoading(false);
+      }
     }
   }
 
@@ -198,22 +247,36 @@ useEffect(() => {
           <button
         className="new-conversation"
         onClick={async () => {
-        try {
-        await resetSession(sessionId);
+  const oldSessionId = sessionId;
+  requestControllerRef.current?.abort(); 
+  requestControllerRef.current = null;
 
-        setMessages([
-        {
-          role: "assistant",
-          content:
-            "Hello! Welcome to our reception desk. I can help you book, check, or cancel an appointment. What would you like to do today?",
-        },
-        ]);
+  // Invalidate all requests belonging to the previous conversation.
+  conversationVersionRef.current += 1;
 
-      setMessage("");
-      } catch (error) {
-      console.error("Session reset error:", error);
-      }
-      }}
+  // Create the new conversation immediately.
+  const newSessionId = crypto.randomUUID();
+  sessionStorage.setItem("voxa_session_id", newSessionId);
+  setSessionId(newSessionId);
+
+  setMessages([
+    {
+      role: "assistant",
+      content:
+        "Hello! Welcome to our reception desk. I can help you book, check, or cancel an appointment. What would you like to do today?",
+    },
+  ]);
+
+  setMessage("");
+  setIsLoading(false);
+
+  // Clean up the previous backend session.
+  try {
+    await resetSession(oldSessionId);
+  } catch (error) {
+    console.error("Session reset error:", error);
+  }
+}}
         >
        + New Conversation
         </button>
@@ -332,9 +395,11 @@ useEffect(() => {
               <button
               type="button"
               className={`voice-button ${isListening ? "listening" : ""}`}
-              title="Voice input"
-              onClick={startListening}> ♩
-              </button>
+              title={isLoading ? "Voxa is processing your message" : "Voice input"}
+              onClick={startListening}
+              disabled={isLoading || isListening}
+              >♩
+            </button>
 
               <input
                 value={message}
@@ -426,31 +491,15 @@ useEffect(() => {
             {appointment.status === "booked" && (
               <button
                 onClick={async () => {
-                try {
-                await resetSession(sessionId);
-
-                const newSessionId = crypto.randomUUID();
-
-                sessionStorage.setItem(
-                  "voxa_session_id",
-                  newSessionId
-                );
-              
-                setSessionId(newSessionId);
-              
-                setMessages([
-                  {
-                    role: "assistant",
-                    content:
-                      "Hello! Welcome to our reception desk. I can help you book, check, or cancel an appointment. What would you like to do today?",
-                  },
-                ]);
-
-                  setMessage("");
+              try {
+                await cancelAppointment(appointment.id);
+                await loadAppointments();
+                await loadAllAppointments();
                 } catch (error) {
-                  console.error("Session reset error:", error);
-                }
-              }}
+                console.error("Appointment cancellation error:", error);
+                setAppointmentsError("Unable to cancel appointment. Please try again.");
+                  }
+                  }}
               >
                 Cancel
               </button>
