@@ -154,11 +154,11 @@ The exact booking workflow should be verified against the current implementation
 - [x] Add appointment date validation
 - [x] Establish the SQLite database foundation
 - [x] Connect the frontend to the backend
-- [ ] Complete and test the end-to-end appointment workflow
+- [x] Complete and test the end-to-end appointment workflow
 - [ ] Strengthen Gemini tool-calling and execution handling
-- [ ] Complete appointment booking, cancellation, and rescheduling flows
+- [x] Complete appointment booking, cancellation, and rescheduling flows
 - [ ] Add comprehensive automated tests
-- [ ] Integrate voice input and output
+- [x] Integrate voice input and output
 - [ ] Evaluate deployment options
 
 
