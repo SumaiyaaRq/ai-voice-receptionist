@@ -1,6 +1,8 @@
+import logging
 from email.mime import message
 import os
 from datetime import date
+from xml.parsers.expat import errors
 
 from dotenv import load_dotenv
 from google import genai
@@ -8,12 +10,13 @@ from google.genai import types
 
 from ai_voice_receptionist.services.appointment_service import (check_availability , book_appointment ,  validate_appointment_date ,  cancel_appointment , get_appointment_by_id , reschedule_appointment)
 
+from google.api_core import exceptions as google_exceptions
 load_dotenv()
 today = date.today().isoformat()
 
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-
+logger = logging.getLogger(__name__)
 SYSTEM_INSTRUCTION = f"""
 Today's date is {today}.
 You are an AI receptionist for a small business.
@@ -451,7 +454,19 @@ def generate_response(message: str, session_id: str) -> str:
     # SEND USER MESSAGE TO GEMINI
     # ---------------------------------------------------------
 
-    response = chat.send_message(message)
+    try:
+        response = chat.send_message(message)
+
+    except errors.APIError as exc:
+        logger.exception("Gemini API request failed for session %s", session_id)
+
+        if getattr(exc, "code", None) == 429:
+            return "I'm experiencing high demand right now. Please try again in a little while."
+
+        elif getattr(exc, "code", None) in (401, 403):
+            return "I'm having trouble connecting to my AI service. Please contact the administrator."
+
+        return "I'm sorry, something went wrong while processing your request. Please try again."
 
     function_call = None
 
@@ -616,13 +631,15 @@ def generate_response(message: str, session_id: str) -> str:
                 "result": result
             },
         )
-
-        final_response = chat.send_message(
-        function_response_part)
-
-
-        print("DEBUG FINAL GEMINI RESPONSE:", final_response)
-
+    try:
+        final_response = chat.send_message(function_response_part)
         return final_response.text
+
+    except errors.APIError:
+        logger.exception(
+        "Gemini failed while processing tool response for session %s",
+        session_id
+    )
+    return "Your request was processed, but I couldn't generate a response. Please check the appointment status or try again."
 
     return response.text
