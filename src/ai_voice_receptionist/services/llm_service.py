@@ -2,6 +2,7 @@ import logging
 from email.mime import message
 import os
 from datetime import date
+from urllib import response
 from xml.parsers.expat import errors
 
 from dotenv import load_dotenv
@@ -315,6 +316,7 @@ def handle_reschedule_confirmation(
 
     return None
 
+
 def generate_response(message: str, session_id: str) -> str:
 
     # ---------------------------------------------------------
@@ -332,20 +334,23 @@ def generate_response(message: str, session_id: str) -> str:
 
     chat = chats[session_id]
 
+    # ---------------------------------------------------------
+    # HANDLE RESCHEDULING CONFIRMATION
+    # ---------------------------------------------------------
+
     confirmation_response = handle_reschedule_confirmation(
-    message,
-    session_id
-)
+        message,
+        session_id
+    )
 
     if confirmation_response is not None:
-        return confirmation_response        
+        return confirmation_response
 
     # ---------------------------------------------------------
-    # CANCELLATION CONFIRMATION
+    # HANDLE CANCELLATION CONFIRMATION
     # ---------------------------------------------------------
 
     if session_id in pending_cancellations:
-        print("DEBUG: checking pending reschedule:", pending_reschedules)
 
         confirmation = message.strip().lower()
 
@@ -393,64 +398,6 @@ def generate_response(message: str, session_id: str) -> str:
             return "Okay, I won't cancel the appointment."
 
     # ---------------------------------------------------------
-    # FINAL RESCHEDULING CONFIRMATION
-    # ---------------------------------------------------------
-
-    if session_id in pending_reschedules:
-
-        confirmation = message.strip().lower()
-
-        positive_confirmations = {
-            "yes",
-            "yes please",
-            "confirm",
-            "confirmed",
-            "correct",
-            "go ahead",
-            "reschedule it",
-            "please reschedule",
-        }
-
-        negative_confirmations = {
-            "no",
-            "no thanks",
-            "don't reschedule",
-            "do not reschedule",
-            "keep it",
-            "keep the appointment",
-        }
-
-        if confirmation in positive_confirmations:
-
-            reschedule_data = pending_reschedules.pop(session_id)
-
-            result = reschedule_appointment(
-                reschedule_data["appointment_id"],
-                reschedule_data["new_date"],
-                reschedule_data["new_time"]
-            )
-
-            if result:
-                return (
-                    f"Appointment {reschedule_data['appointment_id']} "
-                    f"has been successfully rescheduled to "
-                    f"{reschedule_data['new_date']} at "
-                    f"{reschedule_data['new_time']}."
-                )
-
-            return (
-                f"I couldn't reschedule appointment "
-                f"{reschedule_data['appointment_id']}. "
-                "The requested slot may no longer be available."
-            )
-
-        if confirmation in negative_confirmations:
-
-            pending_reschedules.pop(session_id)
-
-            return "Okay, I won't reschedule the appointment."
-
-    # ---------------------------------------------------------
     # SEND USER MESSAGE TO GEMINI
     # ---------------------------------------------------------
 
@@ -458,19 +405,47 @@ def generate_response(message: str, session_id: str) -> str:
         response = chat.send_message(message)
 
     except errors.APIError as exc:
-        logger.exception("Gemini API request failed for session %s", session_id)
+
+        logger.exception(
+            "Gemini API request failed for session %s",
+            session_id
+        )
 
         if getattr(exc, "code", None) == 429:
-            return "I'm experiencing high demand right now. Please try again in a little while."
+            return (
+                "I'm experiencing high demand right now. "
+                "Please try again in a little while."
+            )
 
         elif getattr(exc, "code", None) in (401, 403):
-            return "I'm having trouble connecting to my AI service. Please contact the administrator."
+            return (
+                "I'm having trouble connecting to my AI service. "
+                "Please contact the administrator."
+            )
 
-        return "I'm sorry, something went wrong while processing your request. Please try again."
+        return (
+            "I'm sorry, something went wrong while processing "
+            "your request. Please try again."
+        )
+
+    # ---------------------------------------------------------
+    # VALIDATE GEMINI RESPONSE
+    # ---------------------------------------------------------
+
+    if not response.candidates or not response.candidates[0].content:
+
+        logger.warning(
+            "Gemini returned an empty response for session %s",
+            session_id
+        )
+
+        return "I couldn't generate a response. Please try again."
+
+    parts = response.candidates[0].content.parts or []
 
     function_call = None
 
-    for part in response.candidates[0].content.parts:
+    for part in parts:
 
         if part.function_call:
             function_call = part.function_call
@@ -488,9 +463,9 @@ def generate_response(message: str, session_id: str) -> str:
 
         if function_call.name == "validate_appointment_date":
 
-            date = function_call.args["date"]
+            appointment_date = function_call.args["date"]
 
-            result = validate_appointment_date(date)
+            result = validate_appointment_date(appointment_date)
 
         # -----------------------------------------------------
         # CHECK AVAILABILITY
@@ -498,12 +473,12 @@ def generate_response(message: str, session_id: str) -> str:
 
         elif function_call.name == "check_availability":
 
-            date = function_call.args["date"]
-            time = function_call.args["time"]
+            appointment_date = function_call.args["date"]
+            appointment_time = function_call.args["time"]
 
             result = check_availability(
-                date,
-                time
+                appointment_date,
+                appointment_time
             )
 
         # -----------------------------------------------------
@@ -512,13 +487,13 @@ def generate_response(message: str, session_id: str) -> str:
 
         elif function_call.name == "book_appointment":
 
-            date = function_call.args["date"]
-            time = function_call.args["time"]
+            appointment_date = function_call.args["date"]
+            appointment_time = function_call.args["time"]
             customer_name = function_call.args["customer_name"]
 
             result = book_appointment(
-                date,
-                time,
+                appointment_date,
+                appointment_time,
                 customer_name
             )
 
@@ -587,23 +562,23 @@ def generate_response(message: str, session_id: str) -> str:
                 else:
 
                     pending_reschedules[session_id] = {
-                    "appointment_id": appointment_id,
-                    "new_date": new_date,
-                    "new_time": new_time
+                        "appointment_id": appointment_id,
+                        "new_date": new_date,
+                        "new_time": new_time
                     }
 
-                print(
-                    "DEBUG: pending reschedule created:",
-                                        pending_reschedules
-                            )
+                    logger.info(
+                        "Reschedule confirmation requested for appointment %s",
+                        appointment_id
+                    )
 
-                return (
-        f"The appointment for {appointment['customer_name']} "
-        f"on {appointment['appointment_date']} at "
-        f"{appointment['appointment_time']} will be "
-        f"rescheduled to {new_date} at {new_time}. "
-        "Is this correct?"
-    )
+                    return (
+                        f"The appointment for {appointment['customer_name']} "
+                        f"on {appointment['appointment_date']} at "
+                        f"{appointment['appointment_time']} will be "
+                        f"rescheduled to {new_date} at {new_time}. "
+                        "Is this correct?"
+                    )
 
         # -----------------------------------------------------
         # CANCEL APPOINTMENT
@@ -619,6 +594,11 @@ def generate_response(message: str, session_id: str) -> str:
 
         else:
 
+            logger.warning(
+                "Unknown function call: %s",
+                function_call.name
+            )
+
             return "I couldn't process that request."
 
         # -----------------------------------------------------
@@ -631,15 +611,51 @@ def generate_response(message: str, session_id: str) -> str:
                 "result": result
             },
         )
-    try:
-        final_response = chat.send_message(function_response_part)
-        return final_response.text
 
-    except errors.APIError:
-        logger.exception(
-        "Gemini failed while processing tool response for session %s",
-        session_id
-    )
-    return "Your request was processed, but I couldn't generate a response. Please check the appointment status or try again."
+        try:
+
+            final_response = chat.send_message(function_response_part)
+
+            if not final_response.text:
+                logger.warning(
+                    "Gemini returned empty text after tool execution "
+                    "for session %s",
+                    session_id
+                )
+
+                return (
+                    "Your request was processed, but I couldn't generate "
+                    "a response. Please check the appointment status "
+                    "or try again."
+                )
+
+            return final_response.text
+
+        except errors.APIError:
+
+            logger.exception(
+                "Gemini failed while processing tool response "
+                "for session %s",
+                session_id
+            )
+
+            return (
+                "Your request was processed, but I couldn't generate "
+                "a response. Please check the appointment status "
+                "or try again."
+            )
+
+    # ---------------------------------------------------------
+    # RETURN NORMAL TEXT RESPONSE
+    # ---------------------------------------------------------
+
+    if not response.text:
+
+        logger.warning(
+            "Gemini returned empty text for session %s",
+            session_id
+        )
+
+        return "I couldn't generate a response. Please try again."
 
     return response.text
