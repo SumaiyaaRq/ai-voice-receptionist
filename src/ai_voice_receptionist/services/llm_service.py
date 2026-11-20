@@ -3,7 +3,7 @@ from email.mime import message
 import os
 from datetime import date
 from urllib import response
-from xml.parsers.expat import errors
+from google.genai.errors import APIError
 
 from dotenv import load_dotenv
 from google import genai
@@ -11,7 +11,7 @@ from google.genai import types
 
 from ai_voice_receptionist.services.appointment_service import (check_availability , book_appointment ,  validate_appointment_date ,  cancel_appointment , get_appointment_by_id , reschedule_appointment)
 
-from google.api_core import exceptions as google_exceptions
+# from google.api_core import exceptions as google_exceptions
 load_dotenv()
 today = date.today().isoformat()
 
@@ -404,7 +404,7 @@ def generate_response(message: str, session_id: str) -> str:
     try:
         response = chat.send_message(message)
 
-    except errors.APIError as exc:
+    except APIError as exc:
 
         logger.exception(
             "Gemini API request failed for session %s",
@@ -631,7 +631,7 @@ def generate_response(message: str, session_id: str) -> str:
 
             return final_response.text
 
-        except errors.APIError:
+        except APIError:
 
             logger.exception(
                 "Gemini failed while processing tool response "
